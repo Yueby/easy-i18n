@@ -1,0 +1,26 @@
+{
+    "tip.backpackMax": {
+        "type": "text",
+        "value": {
+            "zh": "背包已满",
+            "en": "Backpack Max"
+        }
+    },
+    "ui.logo": {
+        // 类型为sprite时，value的值有两个类型
+        // 1. 使用sprite的名称，如: ui:money_icon，结构为{图集名}:{sprite名}
+        // 2. 使用uuid，如: 0f4b3f1c-285b-4179-bb89-27dd40dd8294@87287
+        "type": "sprite",
+        "value": {
+            "zh": "ui:money_icon", // 或者uuid如:  0f4b3f1c-285b-4179-bb89-27dd40dd8294@87287
+            "en": "ui:logo_en"
+        }
+    },
+    "ui.dragToMove": {
+        "type": "text",
+        "value": {
+            "zh": "拖动屏幕移动",
+            "en": "Drag to move"
+        }
+    }
+}
