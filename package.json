@@ -41,7 +41,8 @@
         },
         "asset-db": {
             "mount": {
-                "path": "./assets"
+                "path": "./assets",
+                "readonly": true
             }
         }
     },

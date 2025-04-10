@@ -26,12 +26,15 @@ export default defineConfig(({ mode }) => {
 			},
 			watch: isDev
 				? {
-						include: ['./src/**/*.ts', './src/**/*.vue', './src/**/*.css']
-				  }
+					include: ['./src/**/*.ts', './src/**/*.vue', './src/**/*.css']
+				}
 				: null,
 			target: 'modules',
 			minify: false,
-			sourcemap: isDev ? 'inline' : false
+			sourcemap: isDev ? 'inline' : false,
+			rollupOptions: {
+				external: ['fs', 'path', 'electron']
+			}
 		},
 		plugins: [
 			vue({
