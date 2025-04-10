@@ -63,7 +63,7 @@ watch(exportPath, async (newPath) => {
 });
 
 // 处理选择语言
-const handleSelectLanguage = (item: LanguageInfo, index: number) => {
+const handleSelectLanguage = (_: LanguageInfo, index: number) => {
     selectedLanguageIndex.value = index;
 };
 

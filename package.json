@@ -38,6 +38,11 @@
                     "open"
                 ]
             }
+        },
+        "asset-db": {
+            "mount": {
+                "path": "./assets"
+            }
         }
     },
     "panels": {
