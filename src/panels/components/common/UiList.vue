@@ -35,6 +35,11 @@ interface Props {
   disabled?: boolean;
 
   /**
+   * 是否可选中
+   */
+  selectable?: boolean;
+
+  /**
    * 是否可编辑（允许添加和删除）
    */
   editable?: boolean;
@@ -66,11 +71,6 @@ interface Props {
   collapsible?: boolean;
 
   /**
-   * 是否使用暗色主题
-   */
-  dark?: boolean;
-
-  /**
    * 项目宽度（仅横向布局有效）
    * 不设置时由内容自动撑开
    */
@@ -89,13 +89,13 @@ const props = withDefaults(defineProps<Props>(), {
   keyProp: 'id',
   itemClass: '',
   disabled: false,
+  selectable: true,
   editable: false,
   addText: '添加项目',
   showRemoveButton: true,
   header: '',
   expand: true,
   collapsible: true,
-  dark: false,
   itemWidth: undefined,
   itemHeight: undefined
 });
@@ -162,6 +162,7 @@ const toggleExpand = (expanded: boolean) => {
 // 选择项目
 const selectItem = (item: any, index: number) => {
   if (props.disabled) return;
+  if (!props.selectable) return;
 
   currentIndex.value = index;
   emit('select', item, index);
@@ -206,12 +207,12 @@ const getItemKey = (item: any, index: number) => {
   <div class="ui-list-container" :class="{
     disabled,
     editable,
-    dark,
     expanded: isExpanded || !collapsible,
-    horizontal: direction === 'horizontal'
+    horizontal: direction === 'horizontal',
+    'not-selectable': !selectable
   }">
     <!-- 使用通用Header组件，直接传递title属性 -->
-    <UiHeader v-if="header" :title="header" :dark="dark" :collapsible="collapsible" :expanded="isExpanded"
+    <UiHeader v-if="header" :title="header" :collapsible="collapsible" :expanded="isExpanded"
       @toggle="toggleExpand">
       <!-- 用户自定义的header-actions插槽内容 -->
       <slot name="header-actions"></slot>
@@ -227,20 +228,20 @@ const getItemKey = (item: any, index: number) => {
       <div v-for="(item, index) in items" :key="getItemKey(item, index)" :class="[
         'ui-list-item',
         itemClass,
-        { 'selected': index === currentIndex }
+        { 'selected': index === currentIndex && selectable }
       ]" :style="itemStyle" @click="selectItem(item, index)">
         <!-- 列表项内容 -->
         <div class="ui-list-item-content">
-          <slot name="item" :item="item" :index="index" :selected="index === currentIndex">
+          <slot name="item" :item="item" :index="index" :selected="index === currentIndex && selectable">
             <ui-label>{{ item.toString() }}</ui-label>
           </slot>
         </div>
 
-        <!-- 删除按钮 -->
-        <div v-if="editable && showRemoveButton" class="ui-list-item-remove" @click="removeItem($event, item, index)">
-          <ui-button class="remove-button" color="danger">
+        <!-- 删除按钮 - 改为悬浮设计 -->
+        <div v-if="editable && showRemoveButton" class="ui-list-item-remove" @click="removeItem($event, item, index)" :title="'删除'">
+          <ui-button class="remove-button">
             <slot name="remove-icon">
-              <ui-icon value="del" color="danger"></ui-icon>
+              <ui-icon value="close" color="danger" scale="0.8"></ui-icon>
             </slot>
           </ui-button>
         </div>
@@ -286,7 +287,6 @@ const getItemKey = (item: any, index: number) => {
 
 .ui-list-content {
   flex: 1;
-  scrollbar-width: thin !important; /* Firefox滚动条宽度 */
   overflow: auto;
   padding: 4px;
 }
@@ -298,17 +298,16 @@ const getItemKey = (item: any, index: number) => {
   align-items: center;
   overflow-x: auto !important;
   overflow-y: hidden !important;
-  padding: 4px;
+  padding: 6px;
   scroll-behavior: smooth;
   white-space: nowrap;
 }
 
 .ui-list-content.horizontal-list .ui-list-item {
   flex: 0 0 auto;
-  margin: 0 2px;
+  margin: 0 3px;
   display: flex;
   justify-content: center;
-  padding: 2px 4px;
   height: auto;
 }
 
@@ -321,11 +320,14 @@ const getItemKey = (item: any, index: number) => {
   position: relative;
   padding: 4px 8px;
   cursor: pointer;
-  border-radius: 2px;
+  border-radius: 3px;
   transition: background-color 0.2s;
   user-select: none;
   display: flex;
   align-items: center;
+  background-color: var(--item-background, rgba(50, 50, 50, 0.5));
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-color, rgba(127, 127, 127, 0.2));
 }
 
 .ui-list-item-content {
@@ -334,7 +336,7 @@ const getItemKey = (item: any, index: number) => {
 }
 
 .ui-list-item:hover {
-  background-color: var(--hover-color, rgba(127, 127, 127, 0.1));
+  background-color: var(--item-hover, rgba(70, 70, 70, 0.4));
 }
 
 .ui-list-item.selected {
@@ -347,19 +349,44 @@ const getItemKey = (item: any, index: number) => {
 }
 
 .ui-list-item-remove {
-  margin-left: 8px;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: all 0.2s;
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 0 2px 0 4px;
+  background-color: rgba(0, 0, 0, 0.5);
 }
 
 .ui-list-item:hover .ui-list-item-remove {
-  opacity: 1;
+  opacity: 0.8;
+}
+
+.ui-list-item-remove:hover {
+  opacity: 1 !important;
+  background-color: rgba(244, 67, 54, 0.8);
 }
 
 .remove-button {
-  padding: 2px;
+  padding: 0;
   min-width: auto;
-  height: auto;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.remove-button ui-icon {
+  font-size: 10px;
 }
 
 .list-add-button {
@@ -385,5 +412,9 @@ const getItemKey = (item: any, index: number) => {
 .ui-list-empty-text {
   font-style: italic;
   opacity: 0.7;
+}
+
+.ui-list-container.not-selectable .ui-list-item {
+  cursor: default;
 }
 </style>

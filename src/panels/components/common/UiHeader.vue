@@ -22,19 +22,13 @@ interface Props {
      * 禁用状态
      */
     disabled?: boolean;
-
-    /**
-     * 深色主题
-     */
-    dark?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
     title: '',
     expanded: true,
     collapsible: true,
-    disabled: false,
-    dark: false
+    disabled: false
 });
 
 const emit = defineEmits<{
@@ -48,7 +42,7 @@ const emit = defineEmits<{
 const headerClasses = computed(() => {
     return {
         'ui-header': true,
-        'ui-header-dark': props.dark,
+        'ui-header-dark': true,
         'ui-header-disabled': props.disabled,
         'ui-header-collapsible': props.collapsible
     };

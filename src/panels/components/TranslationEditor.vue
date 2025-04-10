@@ -4,6 +4,7 @@ import type { I18nBaseOptions, I18nItem, I18nTextOptions, LanguageInfo } from '.
 import { logger } from '../../utils/logger';
 import UiList from './common/UiList.vue';
 import UiModal from './common/UiModal.vue';
+import TranslationItem from './TranslationItem.vue';
 
 interface Props {
     /**
@@ -17,15 +18,13 @@ interface Props {
     languages: LanguageInfo[];
 
     /**
-     * 深色主题
+     * 默认语言代码
      */
-    dark?: boolean;
+    defaultLanguage?: string;
 }
 
 // 定义组件属性
-const props = withDefaults(defineProps<Props>(), {
-    dark: true
-});
+const props = defineProps<Props>();
 
 // 定义事件
 const emit = defineEmits<{
@@ -187,8 +186,8 @@ const cancelDeleteKey = () => {
     keyToDeleteIndex.value = -1;
 };
 
-// 更新翻译内容
-const updateTranslation = (langCode: string, value: string) => {
+// 处理翻译文本变更
+const handleTranslationTextChange = (langCode: string, value: string) => {
     if (selectedKeyIndex.value < 0) return;
 
     const updatedTranslations = [...props.translations];
@@ -358,6 +357,12 @@ const updateAnchorPoint = (dimension: 'x' | 'y', value: number) => {
     logger.info('更新锚点:', dimension, value);
 };
 
+// 处理精灵图片变更
+const handleSpriteImageChange = (langCode: string, uuid: string) => {
+    // 由于图片资源是共用的，这里可以保存到某个地方或者记录下来
+    console.log(`语言 ${langCode} 的图片资源变更为: ${uuid}`);
+};
+
 // 监听语言列表变化
 watch(() => props.languages, (newLanguages, oldLanguages) => {
     if (!props.translations.length) return;
@@ -410,6 +415,25 @@ watch(() => props.languages, (newLanguages, oldLanguages) => {
         logger.info('已根据语言列表变化更新翻译数据');
     }
 }, { deep: true });
+
+// 获取默认语言的翻译预览
+const getDefaultTranslationPreview = (item: { key: string, item: I18nItem; }) => {
+    // 如果没有设置默认语言或没有语言列表，返回空字符串
+    if (!props.defaultLanguage || !props.languages.length) return '';
+
+    // 获取该键在默认语言中的翻译
+    const translation = item.item.value[props.defaultLanguage];
+
+    // 如果翻译不存在或为空，返回特定提示
+    if (!translation) return '(未翻译)';
+
+    // 如果翻译太长，截断并添加省略号
+    if (translation.length > 20) {
+        return translation.substring(0, 20) + '...';
+    }
+
+    return translation;
+};
 </script>
 
 <template>
@@ -418,12 +442,17 @@ watch(() => props.languages, (newLanguages, oldLanguages) => {
         <div class="split-panel">
             <!-- 左侧面板就是UiList -->
             <UiList class="key-list left-panel" header="翻译键列表" :items="translations" :selectedIndex="selectedKeyIndex"
-                :editable="true" :dark="dark" :expand="true" :collapsible="false" @select="handleSelectKey"
-                @add="handleAddKey" @remove="handleRemoveKey">
+                :editable="true" :expand="true" :collapsible="false" @select="handleSelectKey" @add="handleAddKey"
+                @remove="handleRemoveKey">
                 <template #item="{ item, selected }">
-                    <ui-label :class="{ 'selected-key': selected }">
-                        {{ item.key }}
-                    </ui-label>
+                    <div class="key-list-item">
+                        <ui-label :class="{ 'selected-key': selected }">
+                            {{ item.key }}
+                        </ui-label>
+                        <div v-if="props.languages.length && props.defaultLanguage" class="default-translation">
+                            {{ getDefaultTranslationPreview(item) }}
+                        </div>
+                    </div>
                 </template>
                 <template #empty>
                     <ui-label>暂无翻译键</ui-label>
@@ -438,32 +467,31 @@ watch(() => props.languages, (newLanguages, oldLanguages) => {
                         <ui-label class="translation-key-title">{{ translations[selectedKeyIndex].key }}</ui-label>
                     </div>
                     <div class="translation-values">
+                        <!-- 类型设置区 -->
+                        <ui-prop>
+                            <ui-label slot="label">类型</ui-label>
+                            <ui-select slot="content" :value="translations[selectedKeyIndex].item.type"
+                                @change="updateItemType($event.target.value)">
+                                <option value="text">文本 (Text)</option>
+                                <option value="sprite">图片 (Sprite)</option>
+                            </ui-select>
+                        </ui-prop>
+
                         <!-- 翻译内容区 -->
                         <ui-section header="翻译内容" expand>
-                            <div v-for="lang in languages" :key="lang.code" class="section-item">
-                                <ui-prop>
-                                    <ui-label slot="label">{{ lang.name }} ({{ lang.code }})</ui-label>
-                                    <ui-input slot="content"
-                                        :value="translations[selectedKeyIndex].item.value[lang.code] || ''"
-                                        :placeholder="`输入${lang.name}翻译`"
-                                        @input="updateTranslation(lang.code, $event.target.value)"></ui-input>
-                                </ui-prop>
-                            </div>
+                            <UiList class="no-border-list" :items="languages" :editable="false" :selectable="false">
+                                <template #item="{ item }">
+                                    <TranslationItem :keyName="translations[selectedKeyIndex].key"
+                                        :item="translations[selectedKeyIndex].item" :languageCode="item.code"
+                                        :languageName="item.name"
+                                        @textChange="(value) => handleTranslationTextChange(item.code, value)"
+                                        @spriteChange="(uuid) => handleSpriteImageChange(item.code, uuid)" />
+                                </template>
+                            </UiList>
                         </ui-section>
 
                         <!-- 选项设置区 -->
                         <ui-section header="选项设置" expand>
-                            <div class="section-item">
-                                <ui-prop>
-                                    <ui-label slot="label">类型</ui-label>
-                                    <ui-select slot="content" :value="translations[selectedKeyIndex].item.type"
-                                        @change="updateItemType($event.target.value)">
-                                        <option value="text">文本 (Text)</option>
-                                        <option value="sprite">图片 (Sprite)</option>
-                                    </ui-select>
-                                </ui-prop>
-                            </div>
-
                             <!-- 基础选项 -->
                             <div class="section-item">
                                 <ui-section header="Content Size" expand class="sub-section">
@@ -550,8 +578,7 @@ watch(() => props.languages, (newLanguages, oldLanguages) => {
         </div>
 
         <!-- 添加翻译键模态窗口 -->
-        <UiModal v-model:visible="showAddKeyModal" title="添加翻译键" okText="添加" cancelText="取消" :dark="dark"
-            @ok="confirmAddKey">
+        <UiModal v-model:visible="showAddKeyModal" title="添加翻译键" okText="添加" cancelText="取消" @ok="confirmAddKey">
             <div class="add-key-form">
                 <ui-prop>
                     <ui-label slot="label">键名（Key）</ui-label>
@@ -579,8 +606,8 @@ watch(() => props.languages, (newLanguages, oldLanguages) => {
         </UiModal>
 
         <!-- 删除翻译键确认模态窗口 -->
-        <UiModal v-model:visible="showDeleteKeyModal" title="删除确认" okText="删除" cancelText="取消" :dark="dark"
-            @ok="confirmDeleteKey" @cancel="cancelDeleteKey">
+        <UiModal v-model:visible="showDeleteKeyModal" title="删除确认" okText="删除" cancelText="取消" @ok="confirmDeleteKey"
+            @cancel="cancelDeleteKey">
             <div class="delete-confirm-content">
                 <ui-label>确定要删除翻译键
                     <span v-if="keyToDeleteIndex >= 0" class="key-to-delete">
@@ -597,20 +624,23 @@ watch(() => props.languages, (newLanguages, oldLanguages) => {
 .translation-editor {
     width: 100%;
     overflow: hidden;
-    height: 320px; /* 使用固定高度 */
+    height: 320px;
+    /* 使用固定高度 */
 }
 
 .split-panel {
     display: flex;
-    height: calc(100% - 2px); /* 减去边框的高度，确保底部边框可见 */
+    height: calc(100% - 2px);
+    /* 减去边框的高度，确保底部边框可见 */
     border: 1px solid var(--border-color, rgba(127, 127, 127, 0.2));
     border-radius: 4px;
     overflow: hidden;
-    margin-bottom: 1px; /* 底部留出空间显示边框 */
+    margin-bottom: 1px;
+    /* 底部留出空间显示边框 */
 }
 
 .left-panel {
-    flex: 1;
+    flex: 2;
     border-right: 1px solid var(--border-color, rgba(127, 127, 127, 0.2)) !important;
     overflow: hidden;
     display: flex;
@@ -663,14 +693,14 @@ watch(() => props.languages, (newLanguages, oldLanguages) => {
 .translation-key-title {
     font-size: 16px;
     font-weight: bold;
-    font-family: monospace;
 }
 
 .translation-values {
     flex: 1;
     overflow-y: auto;
     padding-right: 8px;
-    min-height: 200px; /* 添加最小高度确保内容区域有足够空间 */
+    min-height: 200px;
+    /* 添加最小高度确保内容区域有足够空间 */
 }
 
 .section-item {
@@ -689,7 +719,6 @@ watch(() => props.languages, (newLanguages, oldLanguages) => {
 
 .key-to-delete {
     font-weight: bold;
-    font-family: monospace;
     color: var(--danger-color, #f44336);
 }
 
@@ -731,5 +760,26 @@ watch(() => props.languages, (newLanguages, oldLanguages) => {
     margin-top: 4px;
     margin-bottom: 2px;
     border-left: 1px solid var(--border-color, rgba(127, 127, 127, 0.2));
+}
+
+.key-list-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.default-translation {
+    font-size: 11px;
+    opacity: 0.5;
+    margin-top: 2px;
+    font-style: italic;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.no-border-list {
+    border: none !important;
+    margin: 0 !important;
 }
 </style>

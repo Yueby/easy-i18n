@@ -44,10 +44,10 @@
         "default": {
             "main": "./dist/panel.cjs",
             "size": {
-                "min-width": 400,
-                "min-height": 300,
+                "min-width": 440,
+                "min-height": 620,
                 "width": 700,
-                "height": 600
+                "height": 620
             }
         }
     },

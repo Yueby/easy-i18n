@@ -42,11 +42,6 @@ interface Props {
      * 按ESC键是否关闭
      */
     closeOnPressEscape?: boolean;
-
-    /**
-     * 深色主题
-     */
-    dark?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -57,8 +52,7 @@ const props = withDefaults(defineProps<Props>(), {
     width: '480px',
     showClose: true,
     closeOnClickMask: true,
-    closeOnPressEscape: true,
-    dark: false
+    closeOnPressEscape: true
 });
 
 const emit = defineEmits<{
@@ -140,12 +134,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div v-if="isVisible" class="ui-modal-overlay" :class="{ 'ui-modal-dark': dark }" @click="handleMaskClick">
+    <div v-if="isVisible" class="ui-modal-overlay ui-modal-dark" @click="handleMaskClick">
         <div class="ui-modal" :style="modalStyle" @click.stop>
             <!-- 使用UiHeader组件作为标题栏 -->
             <UiHeader
                 :title="title"
-                :dark="dark"
                 :collapsible="false"
             >
                 <ui-button 
