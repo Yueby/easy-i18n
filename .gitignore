@@ -26,3 +26,9 @@ dist-ssr
 
 # Ot
 /docs
+
+# Cocos Creator Engine
+/cc.custom-macro.d.ts
+/jsb.d.ts
+/cc.d.ts
+/cc.env.d.ts
