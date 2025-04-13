@@ -1,8 +1,7 @@
 import { _decorator, Sprite } from 'cc';
 
 import { EDITOR } from 'cc/env';
-import { EasyI18n } from "./EasyI18n";
-import { setOptions } from "./I18nTypes";
+import { EasyI18n, setOptions } from "./EasyI18n.ts";
 
 const { ccclass, property } = _decorator;
 

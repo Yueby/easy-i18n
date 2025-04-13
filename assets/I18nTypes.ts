@@ -1,6 +1,6 @@
 //#region CocosCreator简化类型
 
-import { Color, JsonAsset, SpriteAtlas, SpriteFrame, UIRenderer, UITransform } from "cc";
+import { SpriteAtlas, SpriteFrame } from "cc";
 
 export enum SpriteType {
     SIMPLE = 0,
@@ -141,15 +141,19 @@ export interface SpriteFrameInfo {
     atlas: SpriteAtlas;
 }
 
-export interface II18nJsonProvider {
+export interface II18nProvider {
+    load(): Promise<void>;
+}
+
+export interface II18nJsonProvider extends II18nProvider {
 
     /**
      * 获取国际化数据
      */
-    getJson(): JsonAsset | null;
+    getJson(): string;
 }
 
-export interface II18nSpriteProvider {
+export interface II18nSpriteProvider extends II18nProvider {
     /**
      * 图集列表
      */
@@ -179,39 +183,5 @@ export interface II18nSpriteProvider {
     getAtlas(uuid: string): SpriteAtlas | null;
 }
 
-export function initSpriteProviderMap(spriteProvider: II18nSpriteProvider): void {
-    if (!spriteProvider.altases) return;
-    if (!spriteProvider.atlasUuidMap) spriteProvider.atlasUuidMap = new Map();
-    if (!spriteProvider.infoUuidMap) spriteProvider.infoUuidMap = new Map();
-
-    for (const atlas of spriteProvider.altases) {
-        spriteProvider.atlasUuidMap.set(atlas.name, atlas);
-        for (const spriteFrame of atlas.getSpriteFrames()) {
-            if (!spriteFrame) continue;
-
-            spriteProvider.infoUuidMap.set(spriteFrame.uuid, {
-                spriteFrame: spriteFrame,
-                atlas: atlas
-            });
-        }
-    }
-}
-
-export function setOptions(target: UIRenderer, options: I18nBaseOptions|null): void {
-    if (!target || !options) return;
-
-    const uiTransform = target.getComponent(UITransform);
-    if (uiTransform) {
-        if (options.contentSize) {
-            uiTransform.setContentSize(options.contentSize.width, options.contentSize.height);
-        }
-        if (options.anchorPoint) {
-            uiTransform.setAnchorPoint(options.anchorPoint.x, options.anchorPoint.y);
-        }
-        if (options.color) {
-            target.color = new Color(options.color[0], options.color[1], options.color[2], options.color[3]);
-        }
-    }
-}
 
 //#endregion    
