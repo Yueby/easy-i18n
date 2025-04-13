@@ -10,10 +10,23 @@ export class I18nSprite extends Sprite {
 	@property
 	public key: string = '';
 
+	@property
+	public get translate(): boolean {
+		return false;
+	}
+
+	public set translate(value: boolean) {
+		this.translateI18n();
+	}
+
 	protected start(): void {
 		if (EDITOR) return;
 
-		const spriteFrameInfo = EasyI18n.getSpriteTranslation(this.key);
+		this.translateI18n();
+	}
+
+	private async translateI18n(): Promise<void> {
+		const spriteFrameInfo = await EasyI18n.getSpriteTranslation(this.key);
 		if (!spriteFrameInfo) return;
 		this.spriteAtlas = spriteFrameInfo.atlas;
 		this.spriteFrame = spriteFrameInfo.spriteFrame;

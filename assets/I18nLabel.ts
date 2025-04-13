@@ -28,8 +28,8 @@ export class I18nLabel extends Label {
 		this.translateI18n();
 	}
 
-	private translateI18n(): void {
-		this.string = EasyI18n.getTextTranslation(this.key);
+	private async translateI18n(): Promise<void> {
+		this.string = await EasyI18n.getTextTranslation(this.key);
 		const options = EasyI18n.getOptions(this.key, 'text');
 		setOptions(this, options);
 	}

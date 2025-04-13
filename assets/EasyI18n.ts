@@ -13,7 +13,6 @@ class InternalJsonProvider implements II18nJsonProvider {
         return this._json;
     }
 
-
     async load(): Promise<void> {
 
         return new Promise<void>((resolve, reject) => {
@@ -51,7 +50,6 @@ class InternalJsonProvider implements II18nJsonProvider {
         });
     }
 
-
     getJson(): string {
         if (this._json === "") {
             warn("国际化数据尚未加载完成，返回默认空数据");
@@ -66,7 +64,6 @@ class InternalSpriteProvider implements II18nSpriteProvider {
     public atlasUuidMap: Map<string, SpriteAtlas> = new Map();
 
     public altases: SpriteAtlas[] = [];
-
 
     async load(): Promise<void> {
         return new Promise<void>((resolve, reject) => {
@@ -161,9 +158,11 @@ class EasyI18nManager {
 
     constructor() {
         this.init(new InternalJsonProvider(), new InternalSpriteProvider());
+
     }
 
     public async init(jsonProvider: II18nJsonProvider, spriteProvider: II18nSpriteProvider) {
+
         this._jsonProvider = jsonProvider;
         this._spriteProvider = spriteProvider;
 
@@ -171,6 +170,11 @@ class EasyI18nManager {
         await this._spriteProvider.load();
         this._data = JSON.parse(this._jsonProvider?.getJson()) as I18nData;
         console.log(this._data);
+    }
+
+    private async editorReload() {
+        await this.init(this._jsonProvider, this._spriteProvider);
+        console.log("editorReload", this._data);
     }
 
     public async setup(jsonProvider: II18nJsonProvider, spriteProvider: II18nSpriteProvider) {
@@ -192,11 +196,15 @@ class EasyI18nManager {
         return true;
     }
 
-    public getTextTranslation(key: string): string {
+    public async getTextTranslation(key: string): Promise<string> {
+        if (EDITOR) {
+            await this.editorReload();
+        }
         if (!this.isKeyValid(key)) {
             error(`未找到翻译键值: '${key}'`);
             return "Translation Error";
         }
+
 
         const item = this.data?.items[key];
         if (!item) {
@@ -212,7 +220,11 @@ class EasyI18nManager {
         return value;
     }
 
-    public getSpriteTranslation(key: string): SpriteFrameInfo | null {
+    public async getSpriteTranslation(key: string): Promise<SpriteFrameInfo | null> {
+        if (EDITOR) {
+            await this.editorReload();
+        }
+
         if (!this.isKeyValid(key)) {
             error(`未找到翻译键值: '${key}'`);
             return null;
@@ -258,7 +270,6 @@ class EasyI18nManager {
 
 export const EasyI18n = new EasyI18nManager();
 
-
 export function initSpriteProviderMap(spriteProvider: II18nSpriteProvider): void {
     if (!spriteProvider.altases) return;
     if (!spriteProvider.atlasUuidMap) spriteProvider.atlasUuidMap = new Map();
@@ -288,8 +299,11 @@ export function setOptions(target: UIRenderer, options: I18nBaseOptions | null):
         if (options.anchorPoint) {
             uiTransform.setAnchorPoint(options.anchorPoint.x, options.anchorPoint.y);
         }
+
         if (options.color) {
             target.color = new Color(options.color[0], options.color[1], options.color[2], options.color[3]);
+        } else {
+            target.color = new Color(255, 255, 255, 255);
         }
     }
 }

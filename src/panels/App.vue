@@ -81,90 +81,84 @@ const handleTranslationsChange = (newTranslations: { key: string, item: I18nItem
 onMounted(async () => {
     // 从配置加载导出路径
     await loadExportPath();
-
-    // 初始化测试数据
-    initTestData();
+    
+    // 尝试加载保存的数据
+    await loadSavedData();
 });
 
-// 仅在开发环境中初始化测试数据
-const initTestData = () => {
-    // 添加测试语言
-    languages.value = [
-        { name: '简体中文', code: 'zh' },
-        { name: 'English', code: 'en' },
-        { name: '日本語', code: 'ja' },
-        { name: '한국어', code: 'ko' }
-    ];
-
-    // 设置默认语言
-    defaultLanguage.value = 'zh';
-
-    // 设置初始选中语言
-    selectedLanguageIndex.value = 0;
-
-    // 添加测试翻译键
-    translationKeys.value = [
-        {
-            key: 'common.ok',
-            item: {
-                type: 'text',
-                value: {
-                    'zh': '确定',
-                    'en': 'OK',
-                    'ja': '確認',
-                    'ko': '확인'
-                }
-            }
-        },
-        {
-            key: 'common.cancel',
-            item: {
-                type: 'text',
-                value: {
-                    'zh': '取消',
-                    'en': 'Cancel',
-                    'ja': 'キャンセル',
-                    'ko': '취소'
-                }
-            }
-        },
-        {
-            key: 'common.save',
-            item: {
-                type: 'text',
-                value: {
-                    'zh': '保存',
-                    'en': 'Save',
-                    'ja': '保存',
-                    'ko': '저장'
-                }
-            }
-        },
-        {
-            key: 'game.start',
-            item: {
-                type: 'text',
-                value: {
-                    'zh': '开始游戏',
-                    'en': 'Start Game',
-                    'ja': 'ゲームを始める',
-                    'ko': '게임 시작'
-                }
-            }
-        },
-        {
-            key: 'game.settings',
-            item: {
-                type: 'text',
-                value: {
-                    'zh': '游戏设置',
-                    'en': 'Game Settings',
-                    'ja': 'ゲーム設定',
-                    'ko': '게임 설정'
-                }
-            }
+// 加载保存的数据
+const loadSavedData = async () => {
+    try {
+        if (!exportPath.value) {
+            logger.warn('未设置导出目录，无法加载数据');
+            return;
         }
-    ];
+
+        // 转换为db://格式用于API调用
+        const url = exportPath.value.replace('project://', 'db://');
+        
+        // i18n数据文件路径
+        const fileUrl = `${url}/i18n-data.json`;
+        
+        // 检查文件是否存在
+        const fileInfo = await file.queryAssetInfo(fileUrl);
+        if (!fileInfo) {
+            logger.info('未找到已保存的国际化数据文件');
+            return;
+        }
+        
+        // 获取文件在文件系统中的路径
+        const filePath = await file.queryPath(fileUrl);
+        if (!filePath) {
+            logger.warn('无法获取国际化数据文件的实际路径');
+            return;
+        }
+        
+        // 读取文件内容
+        const content = file.readFile(filePath);
+        if (!content) {
+            logger.warn('读取国际化数据文件内容失败');
+            return;
+        }
+        
+        // 解析JSON内容
+        try {
+            const i18nData = JSON.parse(content);
+            
+            // 加载语言列表
+            if (i18nData.languages && Array.isArray(i18nData.languages)) {
+                languages.value = i18nData.languages;
+            }
+            
+            // 加载默认语言
+            if (i18nData.defaultLanguage) {
+                defaultLanguage.value = i18nData.defaultLanguage;
+            }
+            
+            // 加载翻译键
+            if (i18nData.items) {
+                const translations = [];
+                for (const key in i18nData.items) {
+                    translations.push({
+                        key,
+                        item: i18nData.items[key]
+                    });
+                }
+                translationKeys.value = translations;
+            }
+            
+            // 自动选择第一个语言
+            if (languages.value.length > 0) {
+                selectedLanguageIndex.value = 0;
+            }
+            
+            logger.info('✅ 已成功加载国际化数据');
+        } catch (e) {
+            logger.error('解析国际化数据JSON失败:', e);
+        }
+    } catch (error) {
+        logger.error('加载国际化数据时出错:', error);
+    }
 };
 
 // 处理保存数据
