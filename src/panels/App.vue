@@ -103,21 +103,21 @@ const loadSavedData = async () => {
         // 检查文件是否存在
         const fileInfo = await file.queryAssetInfo(fileUrl);
         if (!fileInfo) {
-            logger.info('未找到已保存的国际化数据文件');
+            logger.info('未找到已保存的数据文件');
             return;
         }
         
         // 获取文件在文件系统中的路径
         const filePath = await file.queryPath(fileUrl);
         if (!filePath) {
-            logger.warn('无法获取国际化数据文件的实际路径');
+            logger.warn('无法获取数据文件的实际路径');
             return;
         }
         
         // 读取文件内容
         const content = file.readFile(filePath);
         if (!content) {
-            logger.warn('读取国际化数据文件内容失败');
+            logger.warn('读取数据文件内容失败');
             return;
         }
         
@@ -152,12 +152,12 @@ const loadSavedData = async () => {
                 selectedLanguageIndex.value = 0;
             }
             
-            logger.info('✅ 已成功加载国际化数据');
+            logger.info('已成功加载数据');
         } catch (e) {
-            logger.error('解析国际化数据JSON失败:', e);
+            logger.error('解析数据JSON失败:', e);
         }
     } catch (error) {
-        logger.error('加载国际化数据时出错:', error);
+        logger.error('加载数据时出错:', error);
     }
 };
 
@@ -169,16 +169,100 @@ const handleSaveData = async () => {
     }
 
     try {
-        // 构建国际化数据对象
+        // 构建数据对象
         const i18nData = {
             languages: languages.value,
             defaultLanguage: defaultLanguage.value,
             items: {} as Record<string, I18nItem>
         };
 
-        // 将翻译键列表转换为对象格式
+        // 将翻译键列表转换为对象格式，并优化数据结构
         translationKeys.value.forEach(entry => {
-            i18nData.items[entry.key] = entry.item;
+            // 创建一个干净的item副本
+            const cleanItem: I18nItem = {
+                type: entry.item.type,
+                value: {}
+            };
+            
+            // 处理每种语言的数据
+            Object.entries(entry.item.value).forEach(([langCode, langValue]) => {
+                // 创建一个干净的语言值对象
+                const cleanLangValue: any = {
+                    text: langValue.text || ''
+                };
+                
+                // 只有当options不为空或null时才包含
+                if (langValue.options && Object.keys(langValue.options).length > 0) {
+                    // 创建干净的options对象，去除空值
+                    const cleanOptions: any = {};
+                    let hasValidOptions = false;
+                    
+                    // 处理基础选项
+                    Object.entries(langValue.options).forEach(([key, value]) => {
+                        // 跳过空值或默认值
+                        if (value === undefined || value === null || value === '') {
+                            return;
+                        }
+                        
+                        // 处理尺寸对象
+                        if (key === 'contentSize' && typeof value === 'object') {
+                            const size = value as any;
+                            // 只有当宽高不都为0时才包含
+                            if (!(size.width === 0 && size.height === 0)) {
+                                cleanOptions.contentSize = {
+                                    width: size.width || 0,
+                                    height: size.height || 0
+                                };
+                                hasValidOptions = true;
+                            }
+                            return;
+                        }
+                        
+                        // 处理锚点对象
+                        if (key === 'anchorPoint' && typeof value === 'object') {
+                            const anchor = value as any;
+                            // 只有当x和y不都为0时才包含
+                            if (!(anchor.x === 0 && anchor.y === 0)) {
+                                cleanOptions.anchorPoint = {
+                                    x: anchor.x || 0,
+                                    y: anchor.y || 0
+                                };
+                                hasValidOptions = true;
+                            }
+                            return;
+                        }
+                        
+                        // 处理颜色属性 (ui-color返回格式为 [r,g,b,a])
+                        if (key === 'color' && Array.isArray(value)) {
+                            // 检查是否为默认黑色 [0,0,0,255] 或完全透明 [x,x,x,0]
+                            const isDefaultBlack = value[0] === 0 && value[1] === 0 && value[2] === 0 && value[3] === 255;
+                            const isTransparent = value[3] === 0;
+                            
+                            // 只有非默认黑色和非透明才保留
+                            if (!isDefaultBlack && !isTransparent) {
+                                cleanOptions.color = value;
+                                hasValidOptions = true;
+                            }
+                            return;
+                        }
+                        
+                        // 其他选项直接包含
+                        cleanOptions[key] = value;
+                        hasValidOptions = true;
+                    });
+                    
+                    // 只有当有有效选项时才添加options对象
+                    if (hasValidOptions) {
+                        cleanLangValue.options = cleanOptions;
+                    }
+                }
+                
+                // 保存处理后的语言值
+                cleanItem.value[langCode] = cleanLangValue;
+            });
+            
+            // 保存处理后的item
+            i18nData.items[entry.key] = cleanItem;
         });
 
         // 将数据格式化为JSON字符串
@@ -203,12 +287,12 @@ const handleSaveData = async () => {
         }
 
         if (result) {
-            logger.info('✅ 国际化数据保存成功!', fileUrl);
+            logger.info('数据保存成功!', fileUrl);
         } else {
-            logger.error('保存国际化数据失败');
+            logger.error('保存数据失败');
         }
     } catch (error) {
-        logger.error('保存国际化数据失败:', error);
+        logger.error('保存数据失败:', error);
     }
 };
 </script>
@@ -226,7 +310,7 @@ const handleSaveData = async () => {
 
         <!-- 翻译编辑器组件 -->
         <TranslationEditor v-model:translations="translationKeys" :languages="languages"
-            :defaultLanguage="defaultLanguage" @change="handleTranslationsChange" />
+            @change="handleTranslationsChange" />
     </div>
 </template>
 

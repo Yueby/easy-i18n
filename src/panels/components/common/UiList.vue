@@ -212,8 +212,7 @@ const getItemKey = (item: any, index: number) => {
     'not-selectable': !selectable
   }">
     <!-- 使用通用Header组件，直接传递title属性 -->
-    <UiHeader v-if="header" :title="header" :collapsible="collapsible" :expanded="isExpanded"
-      @toggle="toggleExpand">
+    <UiHeader v-if="header" :title="header" :collapsible="collapsible" :expanded="isExpanded" @toggle="toggleExpand">
       <!-- 用户自定义的header-actions插槽内容 -->
       <slot name="header-actions"></slot>
 
@@ -238,7 +237,8 @@ const getItemKey = (item: any, index: number) => {
         </div>
 
         <!-- 删除按钮 - 改为悬浮设计 -->
-        <div v-if="editable && showRemoveButton" class="ui-list-item-remove" @click="removeItem($event, item, index)" :title="'删除'">
+        <div v-if="editable && showRemoveButton" class="ui-list-item-remove" @click="removeItem($event, item, index)"
+          :title="'删除'">
           <ui-button class="remove-button">
             <slot name="remove-icon">
               <ui-icon value="close" color="danger" scale="0.8"></ui-icon>
@@ -391,8 +391,7 @@ const getItemKey = (item: any, index: number) => {
 
 .list-add-button {
   min-width: auto;
-  width: 24px;
-  height: 24px;
+
   padding: 0;
   display: flex;
   align-items: center;

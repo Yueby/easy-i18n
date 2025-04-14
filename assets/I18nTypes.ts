@@ -10,7 +10,6 @@ export enum SpriteType {
 }
 
 export enum SizeMode {
-
     CUSTOM = 0,
     TRIMMED = 1,
     RAW = 2
@@ -73,6 +72,21 @@ export interface I18nSpriteOptions extends I18nBaseOptions { }
 export type I18nItemType = 'text' | 'sprite';
 
 /**
+ * 单一语言的翻译值及其配置
+ */
+export interface I18nItemValue {
+    /**
+     * 文本内容或图片引用路径
+     */
+    text: string;
+    
+    /**
+     * 该语言特有的UI配置选项
+     */
+    options?: I18nBaseOptions & Partial<I18nTextOptions & I18nSpriteOptions>;
+}
+
+/**
  * 国际化项目接口
  */
 export interface I18nItem {
@@ -82,17 +96,11 @@ export interface I18nItem {
     type: I18nItemType;
 
     /**
-     * 各语言的值
+     * 各语言的值和选项
      */
     value: {
-        [language: string]: string; // 支持任意语言代码作为key
+        [language: string]: I18nItemValue;
     };
-
-    /**
-     * 选项
-     * 根据type字段的不同，实际类型可能是I18nTextOptions或I18nSpriteOptions
-     */
-    options?: I18nBaseOptions & Partial<I18nTextOptions & I18nSpriteOptions>;
 }
 
 /**
@@ -157,7 +165,7 @@ export interface II18nSpriteProvider extends II18nProvider {
     /**
      * 图集列表
      */
-    altases?: SpriteAtlas[];
+    atlases?: SpriteAtlas[];
 
     /**
      * 图集缓存
@@ -168,7 +176,6 @@ export interface II18nSpriteProvider extends II18nProvider {
      * uuid缓存
      */
     infoUuidMap: Map<string, SpriteFrameInfo>;
-
 
     /**
      * 获取精灵帧
@@ -182,6 +189,5 @@ export interface II18nSpriteProvider extends II18nProvider {
      */
     getAtlas(uuid: string): SpriteAtlas | null;
 }
-
 
 //#endregion    

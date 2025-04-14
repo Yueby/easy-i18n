@@ -57,9 +57,14 @@ button:focus-visible {
 ui-prop {
 	margin-bottom: 3px;
 }
-
-ui-prop ui-button {
+ui-prop ui-button,
+ui-prop ui-num-input {
 	margin-right: 2px;
+}
+
+ui-prop ui-button:last-child,
+ui-prop ui-num-input:last-child {
+	margin-right: 0;
 }
 
 .card {

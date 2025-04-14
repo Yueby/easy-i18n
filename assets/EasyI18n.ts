@@ -1,6 +1,6 @@
 import { _decorator, assetManager, Color, JsonAsset, resources, SpriteAtlas, UIRenderer, UITransform } from 'cc';
-import { I18nBaseOptions, I18nData, I18nItemType, II18nJsonProvider, II18nSpriteProvider, SpriteFrameInfo } from "./I18nTypes.ts";
 import { EDITOR } from "cc/env";
+import { I18nBaseOptions, I18nData, I18nItemType, II18nJsonProvider, II18nSpriteProvider, SpriteFrameInfo } from "./I18nTypes.ts";
 const { ccclass, property } = _decorator;
 
 const I18N_DATA_FILE_PATH: string = "i18n/i18n-data";
@@ -63,7 +63,7 @@ class InternalSpriteProvider implements II18nSpriteProvider {
     public infoNameMap: Map<string, SpriteFrameInfo> = new Map();
     public atlasUuidMap: Map<string, SpriteAtlas> = new Map();
 
-    public altases: SpriteAtlas[] = [];
+    public atlases: SpriteAtlas[] = [];
 
     async load(): Promise<void> {
         return new Promise<void>((resolve, reject) => {
@@ -75,7 +75,7 @@ class InternalSpriteProvider implements II18nSpriteProvider {
                     } else {
                         for (const asset of assets) {
                             this.atlasUuidMap.set(asset.uuid, asset);
-                            this.altases.push(asset);
+                            this.atlases.push(asset);
                         }
                         initSpriteProviderMap(this);
                         resolve();
@@ -100,7 +100,7 @@ class InternalSpriteProvider implements II18nSpriteProvider {
                         } else {
                             for (const asset of atlsAssets) {
                                 this.atlasUuidMap.set(asset.uuid, asset);
-                                this.altases.push(asset);
+                                this.atlases.push(asset);
                             }
 
                             initSpriteProviderMap(this);
@@ -205,19 +205,18 @@ class EasyI18nManager {
             return "Translation Error";
         }
 
-
         const item = this.data?.items[key];
         if (!item) {
             error(`未找到翻译键值: '${key}'`);
             return "Translation Error";
         }
 
-        const value = item.value[this.currentLanguage];
-        if (!value) {
+        const valueObj = item.value[this.currentLanguage];
+        if (!valueObj) {
             warn(`当前语言 '${this.currentLanguage}' 未找到键值 '${key}' 的翻译`);
             return "Translation Error";
         }
-        return value;
+        return valueObj.text;
     }
 
     public async getSpriteTranslation(key: string): Promise<SpriteFrameInfo | null> {
@@ -230,14 +229,15 @@ class EasyI18nManager {
             return null;
         }
 
-        const value = this.data?.items[key].value[this.currentLanguage];
-        if (!value) {
+        const valueObj = this.data?.items[key].value[this.currentLanguage];
+        if (!valueObj) {
             warn(`当前语言 '${this.currentLanguage}' 未找到键值 '${key}' 的翻译`);
             return null;
         }
 
-        if (value.includes(':')) {
-            const result = value.split(':');
+        const text = valueObj.text;
+        if (text.includes(':')) {
+            const result = text.split(':');
             const atlasUuid = result[0];
             const spriteFrameUuid = result[1];
             const atlas = this.spriteProvider?.getAtlas(atlasUuid);
@@ -248,7 +248,7 @@ class EasyI18nManager {
                 spriteFrame: spriteFrame
             } as SpriteFrameInfo;
         } else {
-            return this.spriteProvider?.getSpriteFrameInfo(value);
+            return this.spriteProvider?.getSpriteFrameInfo(text);
         }
     }
 
@@ -264,18 +264,24 @@ class EasyI18nManager {
             return null;
         }
 
-        return item.options || null;
+        const valueObj = item.value[this.currentLanguage];
+        if (!valueObj) {
+            warn(`当前语言 '${this.currentLanguage}' 未找到键值 '${key}' 的选项`);
+            return null;
+        }
+
+        return valueObj.options || null;
     }
 }
 
 export const EasyI18n = new EasyI18nManager();
 
 export function initSpriteProviderMap(spriteProvider: II18nSpriteProvider): void {
-    if (!spriteProvider.altases) return;
+    if (!spriteProvider.atlases) return;
     if (!spriteProvider.atlasUuidMap) spriteProvider.atlasUuidMap = new Map();
     if (!spriteProvider.infoUuidMap) spriteProvider.infoUuidMap = new Map();
 
-    for (const atlas of spriteProvider.altases) {
+    for (const atlas of spriteProvider.atlases) {
         spriteProvider.atlasUuidMap.set(atlas.name, atlas);
         for (const spriteFrame of atlas.getSpriteFrames()) {
             if (!spriteFrame) continue;

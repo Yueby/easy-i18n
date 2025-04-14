@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { defineEmits, defineProps, ref, watch } from 'vue';
-import type { I18nBaseOptions, I18nItem, I18nTextOptions, LanguageInfo } from '../../types/i18n';
+import type { I18nItem, I18nItemValue, LanguageInfo } from '../../types/i18n';
 import { logger } from '../../utils/logger';
 import UiList from './common/UiList.vue';
 import UiModal from './common/UiModal.vue';
@@ -16,11 +16,6 @@ interface Props {
      * 支持的语言列表
      */
     languages: LanguageInfo[];
-
-    /**
-     * 默认语言代码
-     */
-    defaultLanguage?: string;
 }
 
 // 定义组件属性
@@ -47,7 +42,6 @@ watch(() => props.translations, (translations) => {
     // 当列表不为空且没有选中项时，选择第一个
     if (translations.length > 0 && selectedKeyIndex.value === -1) {
         selectedKeyIndex.value = 0;
-        logger.info('自动选择第一个翻译键:', translations[0].key);
     }
     // 如果列表为空，重置选择
     else if (translations.length === 0 && selectedKeyIndex.value !== -1) {
@@ -72,9 +66,8 @@ const newKeyDefaultValue = ref('');
 const keyError = ref('');
 
 // 处理选择翻译键
-const handleSelectKey = (item: { key: string, item: I18nItem; }, index: number) => {
+const handleSelectKey = (_: { key: string, item: I18nItem; }, index: number) => {
     selectedKeyIndex.value = index;
-    logger.info('选择了翻译键:', item.key);
 };
 
 // 添加翻译键
@@ -83,7 +76,6 @@ const handleAddKey = () => {
     newKeyDefaultValue.value = '';
     keyError.value = '';
     showAddKeyModal.value = true;
-    logger.info('打开添加翻译键对话框');
 };
 
 // 检查键名是否有效
@@ -123,15 +115,17 @@ const confirmAddKey = () => {
         key: newKeyName.value,
         item: {
             type: 'text' as const,
-            value: {} as Record<string, string>,
-            options: {} // 空对象，所有选项均为可选
+            value: {} as Record<string, I18nItemValue>
         }
     };
 
     // 如果提供了默认值，且存在至少一种语言，则只为第一个语言设置默认值
     if (newKeyDefaultValue.value && props.languages.length > 0) {
         const firstLang = props.languages[0];
-        newKeyItem.item.value[firstLang.code] = newKeyDefaultValue.value;
+        newKeyItem.item.value[firstLang.code] = {
+            text: newKeyDefaultValue.value,
+            options: {}
+        };
     }
 
     // 更新翻译列表
@@ -159,7 +153,6 @@ const handleRemoveKey = (_item: { key: string, item: I18nItem; }, index: number)
 const confirmDeleteKey = () => {
     if (keyToDeleteIndex.value < 0) return;
 
-    const deletedKey = props.translations[keyToDeleteIndex.value].key;
     const updatedTranslations = [...props.translations];
     updatedTranslations.splice(keyToDeleteIndex.value, 1);
 
@@ -171,7 +164,6 @@ const confirmDeleteKey = () => {
         selectedKeyIndex.value--;
     }
 
-    logger.info('删除了翻译键:', deletedKey);
     showDeleteKeyModal.value = false;
     keyToDeleteIndex.value = -1;
 
@@ -191,13 +183,46 @@ const handleTranslationTextChange = (langCode: string, value: string) => {
     if (selectedKeyIndex.value < 0) return;
 
     const updatedTranslations = [...props.translations];
-    updatedTranslations[selectedKeyIndex.value] = {
-        ...updatedTranslations[selectedKeyIndex.value],
-        item: {
-            ...updatedTranslations[selectedKeyIndex.value].item,
-            value: {
-                ...updatedTranslations[selectedKeyIndex.value].item.value,
-                [langCode]: value
+    const currentItem = updatedTranslations[selectedKeyIndex.value].item;
+
+    // 获取当前语言的值对象或创建新的
+    const langValue = currentItem.value[langCode] || { text: '' };
+
+    // 更新文本
+    updatedTranslations[selectedKeyIndex.value].item = {
+        ...currentItem,
+        value: {
+            ...currentItem.value,
+            [langCode]: {
+                ...langValue,
+                text: value
+            }
+        }
+    };
+
+    // 触发更新事件
+    emit('update:translations', updatedTranslations);
+    emit('change', updatedTranslations);
+};
+
+// 处理选项变更
+const handleOptionsChange = (langCode: string, options: any) => {
+    if (selectedKeyIndex.value < 0) return;
+
+    const updatedTranslations = [...props.translations];
+    const currentItem = updatedTranslations[selectedKeyIndex.value].item;
+
+    // 获取当前语言的值对象或创建新的
+    const langValue = currentItem.value[langCode] || { text: '' };
+
+    // 更新选项
+    updatedTranslations[selectedKeyIndex.value].item = {
+        ...currentItem,
+        value: {
+            ...currentItem.value,
+            [langCode]: {
+                ...langValue,
+                options
             }
         }
     };
@@ -213,13 +238,6 @@ const updateItemType = (type: 'text' | 'sprite') => {
 
     const updatedTranslations = [...props.translations];
 
-    // 确保有选项对象
-    if (!updatedTranslations[selectedKeyIndex.value].item.options) {
-        updatedTranslations[selectedKeyIndex.value].item.options = {
-            color: '#ffffff'
-        };
-    }
-
     // 更新类型
     updatedTranslations[selectedKeyIndex.value].item = {
         ...updatedTranslations[selectedKeyIndex.value].item,
@@ -229,138 +247,6 @@ const updateItemType = (type: 'text' | 'sprite') => {
     // 触发更新事件
     emit('update:translations', updatedTranslations);
     emit('change', updatedTranslations);
-
-    logger.info('更新项目类型为:', type);
-};
-
-// 获取基础选项值
-const getBaseOption = (key: keyof I18nBaseOptions): any => {
-    if (selectedKeyIndex.value < 0) return undefined;
-
-    const options = props.translations[selectedKeyIndex.value].item.options;
-    if (!options) return undefined;
-
-    return options[key];
-};
-
-// 更新基础选项
-const updateBaseOption = (key: keyof I18nBaseOptions, value: any) => {
-    if (selectedKeyIndex.value < 0) return;
-
-    const updatedTranslations = [...props.translations];
-
-    // 确保有选项对象
-    if (!updatedTranslations[selectedKeyIndex.value].item.options) {
-        updatedTranslations[selectedKeyIndex.value].item.options = {};
-    }
-
-    // 更新选项
-    updatedTranslations[selectedKeyIndex.value].item.options = {
-        ...updatedTranslations[selectedKeyIndex.value].item.options,
-        [key]: value
-    };
-
-    // 触发更新事件
-    emit('update:translations', updatedTranslations);
-    emit('change', updatedTranslations);
-
-    logger.info('更新基础选项:', key, value);
-};
-
-// 获取文本选项值
-const getTextOption = (key: keyof I18nTextOptions): any => {
-    if (selectedKeyIndex.value < 0) return undefined;
-
-    const options = props.translations[selectedKeyIndex.value].item.options;
-    if (!options) return undefined;
-
-    return options[key];
-};
-
-// 更新文本选项
-const updateTextOption = (key: keyof I18nTextOptions, value: any) => {
-    if (selectedKeyIndex.value < 0) return;
-
-    const updatedTranslations = [...props.translations];
-
-    // 确保有选项对象
-    if (!updatedTranslations[selectedKeyIndex.value].item.options) {
-        updatedTranslations[selectedKeyIndex.value].item.options = {};
-    }
-
-    // 更新选项
-    updatedTranslations[selectedKeyIndex.value].item.options = {
-        ...updatedTranslations[selectedKeyIndex.value].item.options,
-        [key]: value
-    };
-
-    // 触发更新事件
-    emit('update:translations', updatedTranslations);
-    emit('change', updatedTranslations);
-
-    logger.info('更新文本选项:', key, value);
-};
-
-// 更新内容大小
-const updateContentSize = (dimension: 'width' | 'height', value: number) => {
-    if (selectedKeyIndex.value < 0) return;
-
-    const updatedTranslations = [...props.translations];
-
-    // 获取当前选项或创建空对象
-    const currentOptions = updatedTranslations[selectedKeyIndex.value].item.options || {};
-
-    // 获取当前的内容大小或创建新对象
-    const currentSize = currentOptions.contentSize || { width: 0, height: 0 };
-
-    // 更新选项
-    updatedTranslations[selectedKeyIndex.value].item.options = {
-        ...currentOptions,
-        contentSize: {
-            width: dimension === 'width' ? value : (currentSize.width || 0),
-            height: dimension === 'height' ? value : (currentSize.height || 0)
-        }
-    };
-
-    // 触发更新事件
-    emit('update:translations', updatedTranslations);
-    emit('change', updatedTranslations);
-
-    logger.info('更新内容大小:', dimension, value);
-};
-
-// 更新锚点
-const updateAnchorPoint = (dimension: 'x' | 'y', value: number) => {
-    if (selectedKeyIndex.value < 0) return;
-
-    const updatedTranslations = [...props.translations];
-
-    // 获取当前选项或创建空对象
-    const currentOptions = updatedTranslations[selectedKeyIndex.value].item.options || {};
-
-    // 获取当前的锚点或创建新对象
-    const currentAnchor = currentOptions.anchorPoint || { x: 0, y: 0 };
-
-    // 更新选项
-    updatedTranslations[selectedKeyIndex.value].item.options = {
-        ...currentOptions,
-        anchorPoint: {
-            x: dimension === 'x' ? value : (currentAnchor.x || 0),
-            y: dimension === 'y' ? value : (currentAnchor.y || 0)
-        }
-    };
-
-    // 触发更新事件
-    emit('update:translations', updatedTranslations);
-    emit('change', updatedTranslations);
-
-    logger.info('更新锚点:', dimension, value);
-};
-
-// 处理精灵图片变更
-const handleSpriteImageChange = (langCode: string, uuid: string) => {
-    // 由于图片资源是共用的，这里可以保存到某个地方或者记录下来
-    console.log(`语言 ${langCode} 的图片资源变更为: ${uuid}`);
 };
 
 // 监听语言列表变化
@@ -401,7 +287,7 @@ watch(() => props.languages, (newLanguages, oldLanguages) => {
         if (addedLanguages.length > 0) {
             addedLanguages.forEach(lang => {
                 if (!(lang.code in trans.item.value)) {
-                    trans.item.value[lang.code] = '';
+                    trans.item.value[lang.code] = { text: '', options: {} };
                     hasChanges = true;
                 }
             });
@@ -412,17 +298,17 @@ watch(() => props.languages, (newLanguages, oldLanguages) => {
         // 通知父组件数据已更新
         emit('update:translations', updatedTranslations);
         emit('change', updatedTranslations);
-        logger.info('已根据语言列表变化更新翻译数据');
     }
 }, { deep: true });
 
-// 获取默认语言的翻译预览
-const getDefaultTranslationPreview = (item: { key: string, item: I18nItem; }) => {
-    // 如果没有设置默认语言或没有语言列表，返回空字符串
-    if (!props.defaultLanguage || !props.languages.length) return '';
+// 获取翻译预览
+const getTranslationPreview = (item: { key: string, item: I18nItem; }) => {
+    // 如果没有语言列表，返回空字符串
+    if (!props.languages.length) return '';
 
-    // 获取该键在默认语言中的翻译
-    const translation = item.item.value[props.defaultLanguage];
+    // 使用第一个语言的翻译
+    const firstLangCode = props.languages[0].code;
+    const translation = item.item.value[firstLangCode]?.text;
 
     // 如果翻译不存在或为空，返回特定提示
     if (!translation) return '(未翻译)';
@@ -434,6 +320,59 @@ const getDefaultTranslationPreview = (item: { key: string, item: I18nItem; }) =>
 
     return translation;
 };
+
+// 验证翻译文本格式是否正确（针对sprite类型）
+const validateSpriteText = (text: string): boolean => {
+    if (!text) return true; // 空字符串是有效的（未设置资源）
+
+    // UUID格式校验的正则表达式
+    const uuidRegex = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}(@[0-9a-f]+)?$/i;
+
+    // 检查是否是组合格式
+    if (text.includes(':')) {
+        const parts = text.split(':');
+        if (parts.length !== 2) return false;
+
+        // 检查两部分是否都是有效的UUID
+        return uuidRegex.test(parts[0]) && uuidRegex.test(parts[1]);
+    }
+
+    // 如果不是组合格式，检查整个字符串是否是有效UUID
+    return uuidRegex.test(text);
+};
+
+// 检查所有翻译是否有效，返回无效的项目
+const getInvalidTranslations = (): { key: string, langCode: string; }[] => {
+    const invalidItems: { key: string, langCode: string; }[] = [];
+
+    props.translations.forEach(translation => {
+        // 如果是sprite类型，验证每个语言的文本
+        if (translation.item.type === 'sprite') {
+            props.languages.forEach(lang => {
+                const text = translation.item.value[lang.code]?.text || '';
+                if (text && !validateSpriteText(text)) {
+                    invalidItems.push({
+                        key: translation.key,
+                        langCode: lang.code
+                    });
+                }
+            });
+        }
+    });
+
+    return invalidItems;
+};
+
+// 检查是否有无效的翻译
+const hasInvalidTranslations = (): boolean => {
+    return getInvalidTranslations().length > 0;
+};
+
+// 暴露验证方法给父组件
+defineExpose({
+    validateTranslations: hasInvalidTranslations,
+    getInvalidTranslations
+});
 </script>
 
 <template>
@@ -442,15 +381,14 @@ const getDefaultTranslationPreview = (item: { key: string, item: I18nItem; }) =>
         <div class="split-panel">
             <!-- 左侧面板就是UiList -->
             <UiList class="key-list left-panel" header="翻译键列表" :items="translations" :selectedIndex="selectedKeyIndex"
-                :editable="true" :expand="true" :collapsible="false" @select="handleSelectKey" @add="handleAddKey"
-                @remove="handleRemoveKey">
+                :editable="true" :expand="true" :collapsible="false" :selectable="true" @select="handleSelectKey"
+                @add="handleAddKey" @remove="handleRemoveKey">
                 <template #item="{ item, selected }">
                     <div class="key-list-item">
-                        <ui-label :class="{ 'selected-key': selected }">
-                            {{ item.key }}
+                        <ui-label :class="{ 'selected-key': selected }" v-html="item.key">
                         </ui-label>
-                        <div v-if="props.languages.length && props.defaultLanguage" class="default-translation">
-                            {{ getDefaultTranslationPreview(item) }}
+                        <div v-if="props.languages.length" class="translation-preview">
+                            {{ getTranslationPreview(item) }}
                         </div>
                     </div>
                 </template>
@@ -464,7 +402,7 @@ const getDefaultTranslationPreview = (item: { key: string, item: I18nItem; }) =>
                 <!-- 右侧内容区 - 显示选中的翻译内容 -->
                 <div v-if="selectedKeyIndex >= 0" class="translation-edit">
                     <div class="translation-key-header">
-                        <ui-label class="translation-key-title">{{ translations[selectedKeyIndex].key }}</ui-label>
+                        <ui-label class="translation-key-title" v-html="translations[selectedKeyIndex].key"></ui-label>
                     </div>
                     <div class="translation-values">
                         <!-- 类型设置区 -->
@@ -480,94 +418,14 @@ const getDefaultTranslationPreview = (item: { key: string, item: I18nItem; }) =>
                         <!-- 翻译内容区 -->
                         <ui-section header="翻译内容" expand>
                             <UiList class="no-border-list" :items="languages" :editable="false" :selectable="false">
-                                <template #item="{ item }">
+                                <template #item="{ item: language }">
                                     <TranslationItem :keyName="translations[selectedKeyIndex].key"
-                                        :item="translations[selectedKeyIndex].item" :languageCode="item.code"
-                                        :languageName="item.name"
-                                        @textChange="(value) => handleTranslationTextChange(item.code, value)"
-                                        @spriteChange="(uuid) => handleSpriteImageChange(item.code, uuid)" />
+                                        :item="translations[selectedKeyIndex].item" :languageCode="language.code"
+                                        :languageName="language.name"
+                                        @textChange="(value) => handleTranslationTextChange(language.code, value)"
+                                        @optionsChange="(options) => handleOptionsChange(language.code, options)" />
                                 </template>
                             </UiList>
-                        </ui-section>
-
-                        <!-- 选项设置区 -->
-                        <ui-section header="选项设置" expand>
-                            <!-- 基础选项 -->
-                            <div class="section-item">
-                                <ui-section header="Content Size" expand class="sub-section">
-                                    <div class="section-item">
-                                        <ui-prop>
-                                            <ui-label slot="label">Width</ui-label>
-                                            <ui-num-input slot="content" style="width: 80px;"
-                                                :value="getBaseOption('contentSize')?.width || 0"
-                                                @change="updateContentSize('width', $event.target.value)"></ui-num-input>
-                                        </ui-prop>
-                                    </div>
-
-                                    <div class="section-item">
-                                        <ui-prop>
-                                            <ui-label slot="label">Height</ui-label>
-                                            <ui-num-input slot="content" style="width: 80px;"
-                                                :value="getBaseOption('contentSize')?.height || 0"
-                                                @change="updateContentSize('height', $event.target.value)"></ui-num-input>
-                                        </ui-prop>
-                                    </div>
-                                </ui-section>
-                            </div>
-
-                            <div class="section-item">
-                                <ui-section header="Anchor Point" expand class="sub-section">
-                                    <div class="section-item">
-                                        <ui-prop>
-                                            <ui-label slot="label">X</ui-label>
-                                            <ui-num-input slot="content" style="width: 80px;"
-                                                :value="getBaseOption('anchorPoint')?.x || 0"
-                                                @change="updateAnchorPoint('x', $event.target.value)"></ui-num-input>
-                                        </ui-prop>
-                                    </div>
-
-                                    <div class="section-item">
-                                        <ui-prop>
-                                            <ui-label slot="label">Y</ui-label>
-                                            <ui-num-input slot="content" style="width: 80px;"
-                                                :value="getBaseOption('anchorPoint')?.y || 0"
-                                                @change="updateAnchorPoint('y', $event.target.value)"></ui-num-input>
-                                        </ui-prop>
-                                    </div>
-                                </ui-section>
-                            </div>
-
-                            <div class="section-item">
-                                <ui-prop>
-                                    <ui-label slot="label">Color</ui-label>
-                                    <ui-color slot="content" :value="getBaseOption('color')"
-                                        @change="updateBaseOption('color', $event.target.value)"></ui-color>
-                                </ui-prop>
-                            </div>
-
-                            <!-- 文本类型特有选项 -->
-                            <template v-if="translations[selectedKeyIndex].item.type === 'text'">
-                                <div class="section-item">
-                                    <ui-prop>
-                                        <ui-label slot="label">Font Size</ui-label>
-                                        <ui-num-input slot="content" :value="getTextOption('fontSize')"
-                                            @change="updateTextOption('fontSize', $event.target.value)"></ui-num-input>
-                                    </ui-prop>
-                                </div>
-
-                                <div class="section-item">
-                                    <ui-prop>
-                                        <ui-label slot="label">Line Height</ui-label>
-                                        <ui-num-input slot="content" :value="getTextOption('lineHeight')"
-                                            @change="updateTextOption('lineHeight', $event.target.value)"></ui-num-input>
-                                    </ui-prop>
-                                </div>
-                            </template>
-
-                            <!-- 精灵类型特有选项 -->
-                            <template v-if="translations[selectedKeyIndex].item.type === 'sprite'">
-                                <!-- 精灵选项已从I18nSpriteOptions接口中移除，现在只需要基础选项 -->
-                            </template>
                         </ui-section>
                     </div>
                 </div>
@@ -583,7 +441,7 @@ const getDefaultTranslationPreview = (item: { key: string, item: I18nItem; }) =>
                 <ui-prop>
                     <ui-label slot="label">键名（Key）</ui-label>
                     <ui-input slot="content" v-model="newKeyName" placeholder="例如: common.button.submit"
-                        @input="validateKeyName(newKeyName)"></ui-input>
+                        @input="validateKeyName(newKeyName)" @compositionend="validateKeyName(newKeyName)"></ui-input>
                 </ui-prop>
 
                 <div v-if="keyError" class="error-message">{{ keyError }}</div>
@@ -591,7 +449,8 @@ const getDefaultTranslationPreview = (item: { key: string, item: I18nItem; }) =>
                 <ui-prop class="form-item-spaced">
                     <ui-label slot="label">默认值（可选）</ui-label>
                     <ui-input slot="content" v-model="newKeyDefaultValue"
-                        :placeholder="`仅为${props.languages.length > 0 ? props.languages[0].name : '第一'}语言设置默认值`"></ui-input>
+                        :placeholder="`仅为${props.languages.length > 0 ? props.languages[0].name : '第一'}语言设置默认值`"
+                        @compositionend="() => { }"></ui-input>
                 </ui-prop>
 
                 <div class="key-format-help">
@@ -673,7 +532,6 @@ const getDefaultTranslationPreview = (item: { key: string, item: I18nItem; }) =>
 
 .selected-key {
     font-weight: bold;
-    color: var(--highlight-color, #0078d4);
 }
 
 .translation-edit {
@@ -701,10 +559,6 @@ const getDefaultTranslationPreview = (item: { key: string, item: I18nItem; }) =>
     padding-right: 8px;
     min-height: 200px;
     /* 添加最小高度确保内容区域有足够空间 */
-}
-
-.section-item {
-    margin-left: 12px;
 }
 
 .warning-text {
@@ -754,20 +608,15 @@ const getDefaultTranslationPreview = (item: { key: string, item: I18nItem; }) =>
     opacity: 0.8;
 }
 
-/* 子部分样式 */
-.sub-section {
-    margin-left: 4px;
-    margin-top: 4px;
-    margin-bottom: 2px;
-    border-left: 1px solid var(--border-color, rgba(127, 127, 127, 0.2));
-}
-
 .key-list-item {
+    padding: 4px 8px;
+    cursor: pointer;
+    border-radius: 4px;
     display: flex;
     flex-direction: column;
 }
 
-.default-translation {
+.translation-preview {
     font-size: 11px;
     opacity: 0.5;
     margin-top: 2px;
@@ -781,5 +630,9 @@ const getDefaultTranslationPreview = (item: { key: string, item: I18nItem; }) =>
 .no-border-list {
     border: none !important;
     margin: 0 !important;
+}
+
+.validation-warning {
+    display: none;
 }
 </style>

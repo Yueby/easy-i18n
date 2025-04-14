@@ -20,8 +20,6 @@ export class I18nLabel extends Label {
 		this.translateI18n();
 	}
 
-
-
 	protected start(): void {
 		if (EDITOR) return;
 
@@ -32,5 +30,7 @@ export class I18nLabel extends Label {
 		this.string = await EasyI18n.getTextTranslation(this.key);
 		const options = EasyI18n.getOptions(this.key, 'text');
 		setOptions(this, options);
+		this.fontSize = options?.fontSize ?? this.fontSize;
+		this.lineHeight = options?.lineHeight ?? this.lineHeight;
 	}
 }

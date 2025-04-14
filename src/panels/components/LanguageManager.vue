@@ -55,6 +55,12 @@ const showAddLanguageModal = ref(false);
 const newLanguageName = ref('');
 const newLanguageCode = ref('');
 
+// 改名模态窗口控制
+const showRenameLanguageModal = ref(false);
+const editingLanguageIndex = ref(-1);
+const editLanguageName = ref('');
+const editLanguageCode = ref('');
+
 // 处理选择语言
 const handleSelectLanguage = (item: LanguageInfo, index: number) => {
     emit('select', item, index);
@@ -120,6 +126,49 @@ const handleRemoveLanguage = (item: LanguageInfo, index: number) => {
     logger.info('删除了语言:', item.name);
 };
 
+// 打开语言改名模态窗口
+const openRenameLanguageModal = (index: number) => {
+    if (index < 0 || index >= props.languages.length) return;
+
+    const language = props.languages[index];
+    editingLanguageIndex.value = index;
+    editLanguageName.value = language.name;
+    editLanguageCode.value = language.code;
+    showRenameLanguageModal.value = true;
+};
+
+// 确认改名语言
+const confirmRenameLanguage = () => {
+    if (editingLanguageIndex.value < 0) return;
+    if (!editLanguageName.value || !editLanguageCode.value) {
+        logger.warn('语言名称和代码不能为空');
+        return;
+    }
+
+    const updatedLanguages = [...props.languages];
+    const oldLanguage = updatedLanguages[editingLanguageIndex.value];
+    const isDefault = isDefaultLanguage(oldLanguage);
+
+    // 更新语言信息
+    updatedLanguages[editingLanguageIndex.value] = {
+        name: editLanguageName.value,
+        code: editLanguageCode.value
+    };
+
+    // 如果修改的是默认语言，需要更新默认语言代码
+    if (isDefault) {
+        emit('update:defaultLanguage', editLanguageCode.value);
+    }
+
+    // 触发更新事件
+    emit('update:languages', updatedLanguages);
+    emit('change', updatedLanguages);
+
+    logger.info('修改了语言:', oldLanguage.name, '->', editLanguageName.value);
+    showRenameLanguageModal.value = false;
+    editingLanguageIndex.value = -1;
+};
+
 // 设置默认语言
 const setAsDefaultLanguage = (index: number) => {
     if (index < 0 || index >= props.languages.length) return;
@@ -172,11 +221,15 @@ const isDefaultLanguage = (item: LanguageInfo | undefined) => {
                     @click.stop="setAsDefaultLanguage(selectedIndex)">
                     设为默认
                 </ui-button>
+                <ui-button v-if="selectedIndex >= 0 && selectedIndex < languages.length"
+                    @click.stop="openRenameLanguageModal(selectedIndex)">
+                    <ui-icon value="edit"></ui-icon>
+                </ui-button>
             </template>
 
             <template #item="{ item }">
                 <div class="language-item">
-                    <ui-label :tooltip="item.name" :class="{ 'default-language': isDefaultLanguage(item) }">
+                    <ui-label :tooltip="item.name">
                         {{ item.code }}
                     </ui-label>
                 </div>
@@ -189,12 +242,32 @@ const isDefaultLanguage = (item: LanguageInfo | undefined) => {
             <div class="language-form">
                 <ui-prop>
                     <ui-label slot="label">语言名称</ui-label>
-                    <ui-input slot="content" v-model="newLanguageName" placeholder="例如：繁體中文"></ui-input>
+                    <ui-input slot="content" v-model="newLanguageName" placeholder="例如：繁體中文"
+                        @compositionend="() => { }"></ui-input>
                 </ui-prop>
 
                 <ui-prop>
                     <ui-label slot="label">语言代码</ui-label>
-                    <ui-input slot="content" v-model="newLanguageCode" placeholder="例如：zh-tw"></ui-input>
+                    <ui-input slot="content" v-model="newLanguageCode" placeholder="例如：zh-tw"
+                        @compositionend="() => { }"></ui-input>
+                </ui-prop>
+            </div>
+        </UiModal>
+
+        <!-- 改名语言模态窗口 -->
+        <UiModal v-model:visible="showRenameLanguageModal" title="修改语言" okText="确认" cancelText="取消"
+            @ok="confirmRenameLanguage">
+            <div class="language-form">
+                <ui-prop>
+                    <ui-label slot="label">语言名称</ui-label>
+                    <ui-input slot="content" v-model="editLanguageName" placeholder="例如：繁體中文"
+                        @compositionend="() => { }"></ui-input>
+                </ui-prop>
+
+                <ui-prop>
+                    <ui-label slot="label">语言代码</ui-label>
+                    <ui-input slot="content" v-model="editLanguageCode" placeholder="例如：zh-tw"
+                        @compositionend="() => { }"></ui-input>
                 </ui-prop>
             </div>
         </UiModal>
@@ -218,15 +291,13 @@ const isDefaultLanguage = (item: LanguageInfo | undefined) => {
 
 .language-item {
     padding: 2px 16px;
+    position: relative;
+    display: flex;
+    align-items: center;
 }
 
 .set-default-btn {
     font-size: 12px;
     padding: 2px 8px;
-}
-
-.default-language {
-    font-weight: bold;
-    color: var(--highlight-color, #0078d4);
 }
 </style>
