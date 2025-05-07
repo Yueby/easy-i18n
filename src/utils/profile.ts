@@ -12,7 +12,7 @@ import { logger } from './logger';
  * @param type 配置类型，可选
  * @returns 配置值
  */
-export async function getConfig(
+async function getConfig(
     key: string,
     type?: Editor.Profile.PreferencesProtocol
 ): Promise<any> {
@@ -31,7 +31,7 @@ export async function getConfig(
  * @param type 配置类型，可选
  * @returns 成功返回true，失败返回false
  */
-export async function setConfig(
+async function setConfig(
     key: string,
     value: Editor.Profile.ProfileValueType,
     type?: Editor.Profile.PreferencesProtocol
@@ -51,7 +51,7 @@ export async function setConfig(
  * @param type 配置类型，可选
  * @returns 成功返回true，失败返回false
  */
-export async function removeConfig(
+async function removeConfig(
     key: string,
     type?: Editor.Profile.PreferencesProtocol
 ): Promise<boolean> {
@@ -70,7 +70,7 @@ export async function removeConfig(
  * @param type 配置类型，可选
  * @returns 配置值
  */
-export async function getProject(key: string, type?: Editor.Profile.ProjectProtocol): Promise<any> {
+async function getProject(key: string, type?: Editor.Profile.ProjectProtocol): Promise<any> {
     try {
         return await Editor.Profile.getProject(packageName, key, type);
     } catch (error) {
@@ -86,7 +86,7 @@ export async function getProject(key: string, type?: Editor.Profile.ProjectProto
  * @param type 配置类型，可选
  * @returns 成功返回true，失败返回false
  */
-export async function setProject(
+async function setProject(
     key: string,
     value: Editor.Profile.ProfileValueType,
     type?: Editor.Profile.ProjectProtocol
@@ -106,7 +106,7 @@ export async function setProject(
  * @param type 配置类型，可选
  * @returns 成功返回true，失败返回false
  */
-export async function removeProject(
+async function removeProject(
     key: string,
     type?: Editor.Profile.ProjectProtocol
 ): Promise<boolean> {
@@ -124,7 +124,7 @@ export async function removeProject(
  * @param key 配置键名，可选
  * @returns 配置值
  */
-export async function getTemp(key?: string): Promise<any> {
+async function getTemp(key?: string): Promise<any> {
     try {
         return await Editor.Profile.getTemp(packageName, key);
     } catch (error) {
@@ -139,7 +139,7 @@ export async function getTemp(key?: string): Promise<any> {
  * @param value 配置值
  * @returns 成功返回true，失败返回false
  */
-export async function setTemp(
+async function setTemp(
     key: string,
     value: Editor.Profile.ProfileValueType
 ): Promise<boolean> {
@@ -157,7 +157,7 @@ export async function setTemp(
  * @param key 配置键名
  * @returns 成功返回true，失败返回false
  */
-export async function removeTemp(key: string): Promise<boolean> {
+async function removeTemp(key: string): Promise<boolean> {
     try {
         await Editor.Profile.removeTemp(packageName, key);
         return true;

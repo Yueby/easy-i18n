@@ -14,38 +14,12 @@ function getPrefix(): string {
 }
 
 /**
- * 日志级别枚举
- */
-export enum LogLevel {
-    DEBUG,
-    INFO,
-    WARN,
-    ERROR,
-    NONE,
-}
-
-/**
- * 当前日志级别
- */
-let currentLogLevel = LogLevel.INFO;
-
-/**
- * 设置日志级别
- * @param level 日志级别
- */
-export function setLogLevel(level: LogLevel): void {
-    currentLogLevel = level;
-}
-
-/**
  * 输出调试信息
  * @param message 日志信息
  * @param optionalParams 额外参数
  */
-export function debug(message: string, ...optionalParams: any[]): void {
-    if (currentLogLevel <= LogLevel.DEBUG) {
-        console.debug(`${getPrefix()} ${message}`, ...optionalParams);
-    }
+function debug(message: string, ...optionalParams: any[]): void {
+    console.debug(`${getPrefix()} ${message}`, ...optionalParams);
 }
 
 /**
@@ -53,10 +27,8 @@ export function debug(message: string, ...optionalParams: any[]): void {
  * @param message 日志信息
  * @param optionalParams 额外参数
  */
-export function info(message: string, ...optionalParams: any[]): void {
-    if (currentLogLevel <= LogLevel.INFO) {
-        console.info(`${getPrefix()} ${message}`, ...optionalParams);
-    }
+function info(message: string, ...optionalParams: any[]): void {
+    console.info(`${getPrefix()} ${message}`, ...optionalParams);
 }
 
 /**
@@ -64,10 +36,8 @@ export function info(message: string, ...optionalParams: any[]): void {
  * @param message 日志信息
  * @param optionalParams 额外参数
  */
-export function warn(message: string, ...optionalParams: any[]): void {
-    if (currentLogLevel <= LogLevel.WARN) {
-        console.warn(`${getPrefix()} ${message}`, ...optionalParams);
-    }
+function warn(message: string, ...optionalParams: any[]): void {
+    console.warn(`${getPrefix()} ${message}`, ...optionalParams);
 }
 
 /**
@@ -75,18 +45,14 @@ export function warn(message: string, ...optionalParams: any[]): void {
  * @param message 日志信息
  * @param optionalParams 额外参数
  */
-export function error(message: string, ...optionalParams: any[]): void {
-    if (currentLogLevel <= LogLevel.ERROR) {
-        console.error(`${getPrefix()} ${message}`, ...optionalParams);
-    }
+function error(message: string, ...optionalParams: any[]): void {
+    console.error(`${getPrefix()} ${message}`, ...optionalParams);
 }
 
 // 导出logger对象的命名版本，这样既能保持兼容也能统一风格
 export const logger = {
-    setLogLevel,
     debug,
     info,
     warn,
-    error,
-    LogLevel,
+    error
 };
