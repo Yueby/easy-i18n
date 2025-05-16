@@ -51,9 +51,9 @@
             "main": "./dist/panel.cjs",
             "size": {
                 "min-width": 440,
-                "min-height": 620,
+                "min-height": 740,
                 "width": 700,
-                "height": 620
+                "height": 740
             }
         }
     },

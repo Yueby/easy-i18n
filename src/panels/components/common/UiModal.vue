@@ -42,6 +42,11 @@ interface Props {
      * 按ESC键是否关闭
      */
     closeOnPressEscape?: boolean;
+
+    /**
+     * 按Enter键是否确认
+     */
+    confirmOnPressEnter?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -52,7 +57,8 @@ const props = withDefaults(defineProps<Props>(), {
     width: '480px',
     showClose: true,
     closeOnClickMask: true,
-    closeOnPressEscape: true
+    closeOnPressEscape: true,
+    confirmOnPressEnter: true
 });
 
 const emit = defineEmits<{
@@ -118,8 +124,33 @@ const handleMaskClick = () => {
 
 // 处理键盘事件
 const handleKeyDown = (event: KeyboardEvent) => {
+    // 只有当模态窗口可见时才处理键盘事件
+    if (!isVisible.value) return;
+    
     if (event.key === 'Escape' && props.closeOnPressEscape) {
-        closeModal();
+        event.preventDefault();
+        handleCancel();
+    } else if (event.key === 'Enter' && props.confirmOnPressEnter) {
+        // 避免在input元素内按Enter键时也触发确认
+        const activeElement = document.activeElement;
+        const isTextArea = activeElement && activeElement.tagName === 'TEXTAREA';
+        
+        // 如果是多行文本框，不触发确认
+        if (isTextArea) return;
+        
+        // 如果是单行输入框且正在输入，不触发确认
+        if (activeElement && activeElement.tagName === 'INPUT' && 
+            (activeElement as HTMLInputElement).type === 'text') {
+            // 如果按下了修饰键（如组合键Ctrl+Enter等）才触发
+            if (event.ctrlKey || event.metaKey) {
+                event.preventDefault();
+                handleOk();
+            }
+        } else {
+            // 不是文本输入元素，直接触发确认
+            event.preventDefault();
+            handleOk();
+        }
     }
 };
 
@@ -160,10 +191,10 @@ onBeforeUnmount(() => {
             <div class="ui-modal-footer">
                 <slot name="footer">
                     <ui-button @click="handleCancel">
-                        <ui-icon value="close"></ui-icon>
+                        {{ cancelText }}
                     </ui-button>
                     <ui-button type="primary" @click="handleOk">
-                        <ui-icon value="check"></ui-icon>
+                        {{ okText }}
                     </ui-button>
                 </slot>
             </div>
@@ -215,6 +246,7 @@ onBeforeUnmount(() => {
 }
 
 .ui-modal-footer ui-button {
-    width: 48px;
+    min-width: 64px;
+    padding: 0 12px;
 }
 </style>

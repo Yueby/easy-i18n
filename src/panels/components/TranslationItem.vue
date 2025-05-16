@@ -64,14 +64,14 @@ const langValue = computed<I18nItemValue>(() => {
 const text = computed({
     get() {
         const rawText = props.item.value[props.languageCode]?.text || '';
-        
+
         // 如果是图片类型且验证失败，返回空字符串
         if (props.item.type === 'sprite' && !validateSpriteText(rawText)) {
             // 通知父组件清空无效翻译
             setTimeout(() => emit('textChange', ''), 0);
             return '';
         }
-        
+
         return rawText;
     },
     set(value: string) {
@@ -99,31 +99,31 @@ const getTranslationText = () => {
 // 从翻译文本中获取精灵帧UUID
 const getSpriteFrameUuid = () => {
     const text = langValue.value.text || '';
-    
+
     // 如果是组合格式（atlas:spriteFrame），则提取spriteFrame部分
     if (text && text.includes(':')) {
         return text.split(':')[1]; // 返回spriteFrame的UUID部分
     }
-    
+
     return text; // 如果不是组合格式，直接返回（可能是单独的spriteFrame UUID）
 };
 
 // 验证翻译文本格式是否正确（针对sprite类型）
 const validateSpriteText = (text: string): boolean => {
     if (!text) return true; // 空字符串是有效的（未设置资源）
-    
+
     // UUID格式校验的正则表达式
     const uuidRegex = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}(@[0-9a-f]+)?$/i;
-    
+
     // 检查是否是组合格式
     if (text.includes(':')) {
         const parts = text.split(':');
         if (parts.length !== 2) return false;
-        
+
         // 检查两部分是否都是有效的UUID
         return uuidRegex.test(parts[0]) && uuidRegex.test(parts[1]);
-    } 
-    
+    }
+
     // 如果不是组合格式，检查整个字符串是否是有效UUID
     return uuidRegex.test(text);
 };
@@ -171,7 +171,7 @@ const handleSpriteChange = async (event: any) => {
             try {
                 // 查询图集资源信息
                 const atlasInfo = await file.queryAssetInfo(atlasUrl);
- 
+
                 if (atlasInfo && atlasInfo.type === "cc.SpriteAtlas") {
                     atlasUuid = atlasInfo.uuid;
                 }
@@ -232,7 +232,7 @@ const updateTextOption = (key: keyof I18nTextOptions, value: any) => {
 const updateContentSize = (dimension: 'width' | 'height', value: number) => {
     const currentOptions = langValue.value.options || {};
     const currentSize = currentOptions.contentSize || { width: 0, height: 0 };
-    
+
     emit('optionsChange', {
         ...currentOptions,
         contentSize: {
@@ -246,7 +246,7 @@ const updateContentSize = (dimension: 'width' | 'height', value: number) => {
 const updateAnchorPoint = (dimension: 'x' | 'y', value: number) => {
     const currentOptions = langValue.value.options || {};
     const currentAnchor = currentOptions.anchorPoint || { x: 0, y: 0 };
-    
+
     emit('optionsChange', {
         ...currentOptions,
         anchorPoint: {
@@ -270,8 +270,8 @@ const updateAnchorPoint = (dimension: 'x' | 'y', value: number) => {
             <template v-if="item.type !== 'sprite'">
                 <ui-prop>
                     <ui-label slot="label">翻译文本</ui-label>
-                    <ui-input slot="content" v-model="text" :placeholder="`输入${languageName}翻译`"
-                        @compositionend="handleCompositionEnd" :title="getTranslationText()"></ui-input>
+                    <ui-textarea slot="content" v-model="text" :placeholder="`输入${languageName}翻译`"
+                        @compositionend="handleCompositionEnd" :title="getTranslationText()"></ui-textarea>
                 </ui-prop>
             </template>
 
@@ -288,22 +288,20 @@ const updateAnchorPoint = (dimension: 'x' | 'y', value: number) => {
                         <!-- 上部分翻译框 -->
                         <ui-prop>
                             <ui-label slot="label">翻译ID</ui-label>
-                            <ui-input slot="content" :value="friendlyResourceId" readonly :placeholder="`精灵资源ID`"
-                                tooltip="保存为 {SpriteAtlas Uuid}:{SpriteFrame Uuid}"></ui-input>
-
+                            <ui-input slot="content" :value="getTranslationText()" readonly :placeholder="`精灵图片uuid`"></ui-input>
                         </ui-prop>
 
                         <!-- 下部分图片资源拖拽框 -->
                         <ui-prop>
-                            <ui-label slot="label">图片资源</ui-label>
-                            <ui-asset slot="content" droppable="cc.SpriteFrame" placeholder="拖入图片资源"
+                            <ui-label slot="label">精灵图片</ui-label>
+                            <ui-asset slot="content" droppable="cc.SpriteFrame" placeholder="拖入精灵帧资源"
                                 :value="getSpriteFrameUuid()" @change="handleSpriteChange"
                                 @compositionend="handleCompositionEnd"></ui-asset>
                         </ui-prop>
 
                         <!-- 图集资源显示框 -->
                         <ui-prop v-if="getAtlasUuid()">
-                            <ui-label slot="label">图集资源</ui-label>
+                            <ui-label slot="label">所属图集</ui-label>
                             <ui-asset slot="content" droppable="cc.SpriteAtlas" readonly :value="getAtlasUuid()"
                                 placeholder="图片所属图集"></ui-asset>
                         </ui-prop>
@@ -422,10 +420,7 @@ const updateAnchorPoint = (dimension: 'x' | 'y', value: number) => {
 }
 
 .invalid-text {
-    display: none;  /* 隐藏而不是完全删除，以便将来可能需要 */
-}
-
-.invalid-sprite {
-    /* 移除无效样式 */
+    display: none;
+    /* 隐藏而不是完全删除，以便将来可能需要 */
 }
 </style>

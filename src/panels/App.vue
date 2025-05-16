@@ -7,9 +7,10 @@ import { profile } from '../utils/profile';
 import ControlPanel from './components/ControlPanel.vue';
 import LanguageManager from './components/LanguageManager.vue';
 import TranslationEditor from './components/TranslationEditor.vue';
+import UiModal from './components/common/UiModal.vue';
 
 // 默认导出路径
-const defaultExportPath = 'project://assets/resources/i18n';
+const defaultExportPath = 'project://assets/resources/easy-i18n';
 const exportPath = ref(defaultExportPath);
 
 // 语言列表数据 - 初始化为空数组
@@ -23,6 +24,12 @@ const selectedLanguageIndex = ref(-1);
 
 // 测试用的翻译键列表
 const translationKeys = ref<{ key: string, item: I18nItem; }[]>([]);
+
+// 转移相关变量
+const showTransferModal = ref(false);
+const targetPath = ref('');
+const transferMessage = ref('');
+const isTransferring = ref(false);
 
 // 加载配置的exportPath
 const loadExportPath = async () => {
@@ -81,7 +88,7 @@ const handleTranslationsChange = (newTranslations: { key: string, item: I18nItem
 onMounted(async () => {
     // 从配置加载导出路径
     await loadExportPath();
-    
+
     // 尝试加载保存的数据
     await loadSavedData();
 });
@@ -96,45 +103,45 @@ const loadSavedData = async () => {
 
         // 转换为db://格式用于API调用
         const url = exportPath.value.replace('project://', 'db://');
-        
+
         // i18n数据文件路径
         const fileUrl = `${url}/i18n-data.json`;
-        
+
         // 检查文件是否存在
         const fileInfo = await file.queryAssetInfo(fileUrl);
         if (!fileInfo) {
             logger.info('未找到已保存的数据文件');
             return;
         }
-        
+
         // 获取文件在文件系统中的路径
         const filePath = await file.queryPath(fileUrl);
         if (!filePath) {
             logger.warn('无法获取数据文件的实际路径');
             return;
         }
-        
+
         // 读取文件内容
         const content = file.readFile(filePath);
         if (!content) {
             logger.warn('读取数据文件内容失败');
             return;
         }
-        
+
         // 解析JSON内容
         try {
             const i18nData = JSON.parse(content);
-            
+
             // 加载语言列表
             if (i18nData.languages && Array.isArray(i18nData.languages)) {
                 languages.value = i18nData.languages;
             }
-            
+
             // 加载默认语言
             if (i18nData.defaultLanguage) {
                 defaultLanguage.value = i18nData.defaultLanguage;
             }
-            
+
             // 加载翻译键
             if (i18nData.items) {
                 const translations = [];
@@ -146,12 +153,12 @@ const loadSavedData = async () => {
                 }
                 translationKeys.value = translations;
             }
-            
+
             // 自动选择第一个语言
             if (languages.value.length > 0) {
                 selectedLanguageIndex.value = 0;
             }
-            
+
             logger.info('已成功加载数据');
         } catch (e) {
             logger.error('解析数据JSON失败:', e);
@@ -183,27 +190,28 @@ const handleSaveData = async () => {
                 type: entry.item.type,
                 value: {}
             };
-            
+
             // 处理每种语言的数据
             Object.entries(entry.item.value).forEach(([langCode, langValue]) => {
                 // 创建一个干净的语言值对象
                 const cleanLangValue: any = {
-                    text: langValue.text || ''
+                    text: langValue.text || '',
+                    options: {} // 始终包含options对象，即使是空的
                 };
-                
-                // 只有当options不为空或null时才包含
+
+                // 处理options，如果有效则填充
                 if (langValue.options && Object.keys(langValue.options).length > 0) {
                     // 创建干净的options对象，去除空值
                     const cleanOptions: any = {};
                     let hasValidOptions = false;
-                    
+
                     // 处理基础选项
                     Object.entries(langValue.options).forEach(([key, value]) => {
                         // 跳过空值或默认值
                         if (value === undefined || value === null || value === '') {
                             return;
                         }
-                        
+
                         // 处理尺寸对象
                         if (key === 'contentSize' && typeof value === 'object') {
                             const size = value as any;
@@ -217,7 +225,7 @@ const handleSaveData = async () => {
                             }
                             return;
                         }
-                        
+
                         // 处理锚点对象
                         if (key === 'anchorPoint' && typeof value === 'object') {
                             const anchor = value as any;
@@ -231,13 +239,13 @@ const handleSaveData = async () => {
                             }
                             return;
                         }
-                        
+
                         // 处理颜色属性 (ui-color返回格式为 [r,g,b,a])
                         if (key === 'color' && Array.isArray(value)) {
                             // 检查是否为默认黑色 [0,0,0,255] 或完全透明 [x,x,x,0]
                             const isDefaultBlack = value[0] === 0 && value[1] === 0 && value[2] === 0 && value[3] === 255;
                             const isTransparent = value[3] === 0;
-                            
+
                             // 只有非默认黑色和非透明才保留
                             if (!isDefaultBlack && !isTransparent) {
                                 cleanOptions.color = value;
@@ -245,22 +253,22 @@ const handleSaveData = async () => {
                             }
                             return;
                         }
-                        
+
                         // 其他选项直接包含
                         cleanOptions[key] = value;
                         hasValidOptions = true;
                     });
-                    
-                    // 只有当有有效选项时才添加options对象
+
+                    // 如果有有效选项，则使用处理后的options对象
                     if (hasValidOptions) {
                         cleanLangValue.options = cleanOptions;
                     }
                 }
-                
+
                 // 保存处理后的语言值
                 cleanItem.value[langCode] = cleanLangValue;
             });
-            
+
             // 保存处理后的item
             i18nData.items[entry.key] = cleanItem;
         });
@@ -295,6 +303,90 @@ const handleSaveData = async () => {
         logger.error('保存数据失败:', error);
     }
 };
+
+// 处理转移文件
+const handleTransferData = async () => {
+    if (!exportPath.value) {
+        logger.warn('请先选择当前的导出目录');
+        return;
+    }
+
+    if (!targetPath.value) {
+        logger.warn('请选择目标目录');
+        return;
+    }
+
+    if (exportPath.value === targetPath.value) {
+        transferMessage.value = '当前目录与目标目录相同，无需转移';
+        return;
+    }
+
+    try {
+        isTransferring.value = true;
+        transferMessage.value = '正在转移文件...';
+
+        // 源文件URL (db://格式)
+        const sourceUrl = exportPath.value.replace('project://', 'db://');
+        const sourceFileUrl = `${sourceUrl}/i18n-data.json`;
+
+        // 目标文件URL (db://格式)
+        const targetUrl = targetPath.value.replace('project://', 'db://');
+        const targetFileUrl = `${targetUrl}/i18n-data.json`;
+
+        // 检查源文件是否存在
+        const fileInfo = await file.queryAssetInfo(sourceFileUrl);
+        if (!fileInfo) {
+            transferMessage.value = '源文件不存在，无法转移';
+            isTransferring.value = false;
+            return;
+        }
+        
+        // 检查目标目录是否存在，不存在则创建
+        const targetDirInfo = await file.queryAssetInfo(targetUrl);
+        if (!targetDirInfo) {
+            // 创建目标目录
+            await file.createAsset(`${targetUrl}/`, null);
+        }
+
+        // 移动文件
+        const success = await file.moveAsset(sourceFileUrl, targetFileUrl);
+        
+        if (success) {
+            // 更新导出路径
+            exportPath.value = targetPath.value;
+            targetPath.value = '';
+            transferMessage.value = '文件转移成功！';
+            
+            // 2秒后关闭模态窗口
+            setTimeout(() => {
+                showTransferModal.value = false;
+                transferMessage.value = '';
+                isTransferring.value = false;
+            }, 2000);
+        } else {
+            transferMessage.value = '文件转移失败，请检查权限或目录是否有效';
+            isTransferring.value = false;
+        }
+    } catch (error) {
+        transferMessage.value = `转移过程出错: ${error}`;
+        isTransferring.value = false;
+        logger.error('转移文件失败:', error);
+    }
+};
+
+// 处理目标路径变更
+const handleTargetPathChange = (path: string) => {
+    targetPath.value = path;
+    transferMessage.value = '';
+};
+
+// 打开转移文件对话框
+const openTransferDialog = () => {
+    targetPath.value = '';
+    transferMessage.value = '';
+    isTransferring.value = false;
+    showTransferModal.value = true;
+};
 </script>
 
 <template>
@@ -302,15 +394,43 @@ const handleSaveData = async () => {
         <ui-label class="title" i18n>easy-i18n.title</ui-label>
 
         <!-- 控制面板 -->
-        <ControlPanel v-model:exportPath="exportPath" @save="handleSaveData" />
+        <ControlPanel v-model:exportPath="exportPath" @save="handleSaveData" @transfer="openTransferDialog" />
 
         <!-- 语言管理器组件 -->
         <LanguageManager v-model:languages="languages" :selectedIndex="selectedLanguageIndex"
-            v-model:defaultLanguage="defaultLanguage" @select="handleSelectLanguage" @change="handleLanguagesChange" />
+            v-model:defaultLanguage="defaultLanguage" @select="handleSelectLanguage" @change="handleLanguagesChange"
+            @save="handleSaveData" />
 
-        <!-- 翻译编辑器组件 -->
-        <TranslationEditor v-model:translations="translationKeys" :languages="languages"
-            @change="handleTranslationsChange" />
+        <!-- 翻译编辑器组件 - 只在有语言时显示 -->
+        <TranslationEditor v-if="languages.length > 0" v-model:translations="translationKeys" :languages="languages"
+            @change="handleTranslationsChange" @save="handleSaveData" />
+
+        <!-- 当没有语言时显示提示信息 -->
+        <div v-else class="no-language-tip">
+            <ui-label>请先添加至少一种语言，然后才能进行翻译管理喵~</ui-label>
+        </div>
+
+        <!-- 转移文件对话框 -->
+        <UiModal v-model:visible="showTransferModal" title="转移文件" okText="转移" cancelText="取消"
+            @ok="handleTransferData" @cancel="showTransferModal = false">
+            <div class="transfer-dialog">
+                <ui-prop>
+                    <ui-label slot="label">当前目录</ui-label>
+                    <ui-input slot="content" readonly :value="exportPath"></ui-input>
+                </ui-prop>
+
+                <ui-prop>
+                    <ui-label slot="label">目标目录</ui-label>
+                    <ui-file slot="content" type="directory" :value="targetPath" protocols="project" 
+                        placeholder="选择目标目录" @change="handleTargetPathChange($event.target.value)">
+                    </ui-file>
+                </ui-prop>
+
+                <div v-if="transferMessage" class="transfer-message" :class="{ 'success': transferMessage.includes('成功') }">
+                    {{ transferMessage }}
+                </div>
+            </div>
+        </UiModal>
     </div>
 </template>
 
@@ -328,5 +448,30 @@ const handleSaveData = async () => {
     font-weight: bold;
     margin-bottom: 16px;
     text-align: center;
+}
+
+.no-language-tip {
+    margin-top: 20px;
+    padding: 16px;
+    text-align: center;
+    background-color: rgba(50, 50, 50, 0.2);
+    border-radius: 4px;
+    border: 1px dashed rgba(127, 127, 127, 0.3);
+}
+
+.transfer-dialog {
+    padding: 8px 0;
+}
+
+.transfer-message {
+    margin-top: 16px;
+    padding: 8px 12px;
+    background-color: rgba(255, 100, 100, 0.2);
+    border-radius: 4px;
+    text-align: center;
+}
+
+.transfer-message.success {
+    background-color: rgba(100, 255, 100, 0.2);
 }
 </style>

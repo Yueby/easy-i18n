@@ -48,6 +48,11 @@ const emit = defineEmits<{
      * 默认语言变更时触发
      */
     (e: 'update:defaultLanguage', code: string): void;
+    
+    /**
+     * 触发保存功能
+     */
+    (e: 'save'): void;
 }>();
 
 // 模态窗口控制
@@ -95,6 +100,9 @@ const confirmAddLanguage = () => {
 
     logger.info('添加了新语言:', newLanguageName.value, `(${newLanguageCode.value})`);
     showAddLanguageModal.value = false;
+    
+    // 触发保存事件
+    emit('save');
 };
 
 // 处理删除语言
@@ -124,6 +132,9 @@ const handleRemoveLanguage = (item: LanguageInfo, index: number) => {
     }
 
     logger.info('删除了语言:', item.name);
+    
+    // 触发保存事件
+    emit('save');
 };
 
 // 打开语言改名模态窗口
@@ -167,6 +178,9 @@ const confirmRenameLanguage = () => {
     logger.info('修改了语言:', oldLanguage.name, '->', editLanguageName.value);
     showRenameLanguageModal.value = false;
     editingLanguageIndex.value = -1;
+    
+    // 触发保存事件
+    emit('save');
 };
 
 // 设置默认语言
@@ -201,6 +215,9 @@ const setAsDefaultLanguage = (index: number) => {
     }
 
     logger.info('设置默认语言:', targetLanguage.name, `(${targetLanguage.code})`);
+    
+    // 触发保存事件
+    emit('save');
 };
 
 // 检查一个语言是否默认语言

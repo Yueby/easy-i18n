@@ -3,7 +3,7 @@ import { EDITOR } from 'cc/env';
 import { I18nBaseOptions, I18nData, I18nItemType, II18nJsonProvider, II18nSpriteProvider, SpriteFrameInfo } from './I18nTypes.ts';
 const { ccclass, property } = _decorator;
 
-const I18N_DATA_FILE_PATH: string = 'i18n/i18n-data';
+const I18N_DATA_FILE_PATH: string = 'easy-i18n/i18n-data';
 const I18N_ATLAS_PATH: string = 'atlas/';
 
 class InternalJsonProvider implements II18nJsonProvider {
@@ -27,20 +27,21 @@ class InternalJsonProvider implements II18nJsonProvider {
 				});
 			} else {
 				// @ts-ignore
-				const result = await Editor.Message.request('asset-db', 'query-uuid', `db://assets/resources/${I18N_DATA_FILE_PATH}.json`);
-				if (result.uuid) {
-					assetManager.loadAny(result, (err, asset) => {
-						if (err) {
-							error(`加载国际化数据失败: ${err}`);
-							reject(err);
-						} else {
-							this._json = JSON.stringify(asset.json);
-							resolve();
-						}
-					});
-				} else {
-					warn('配置文件未找到');
-				}
+				Editor.Message.request('asset-db', 'query-uuid', `db://assets/resources/${I18N_DATA_FILE_PATH}.json`).then((uuid) => {
+					if (uuid) {
+						assetManager.loadAny(uuid, (err, asset) => {
+							if (err) {
+								error(`加载国际化数据失败: ${err}`);
+								reject(err);
+							} else {
+								this._json = JSON.stringify(asset.json);
+								resolve();
+							}
+						});
+					} else {
+						warn('配置文件未找到', uuid);
+					}
+				});
 			}
 		});
 	}
@@ -85,12 +86,20 @@ class InternalSpriteProvider implements II18nSpriteProvider {
 					.then((assetInfos) => {
 						const assetUuids = assetInfos.map((info) => info.uuid);
 
-						assetManager.loadAny(assetUuids, (err, atlsAssets) => {
+						assetManager.loadAny(assetUuids, (err, result) => {
 							if (err) {
 								error(`初始化加载图集列表失败: ${err}`);
 								reject(err);
 							} else {
-								for (const asset of atlsAssets) {
+								let atlasList: SpriteAtlas[] = [];
+
+								if (Array.isArray(result)) {
+									atlasList = result;
+								} else if (result) {
+									atlasList.push(result);
+								}
+
+								for (const asset of atlasList) {
 									this.atlasUuidMap.set(asset.uuid, asset);
 									this.atlases.push(asset);
 								}
@@ -158,12 +167,12 @@ class EasyI18nManager {
 		await this._jsonProvider.load();
 		await this._spriteProvider.load();
 		this._data = JSON.parse(this._jsonProvider?.getJson()) as I18nData;
-		console.log(this._data);
+		// console.log('init', this._data);
 	}
 
 	private async editorReload() {
 		await this.init(this._jsonProvider, this._spriteProvider);
-		console.log('editorReload', this._data);
+		// console.log('editorReload', this._data);
 	}
 
 	public async setup(jsonProvider: II18nJsonProvider, spriteProvider: II18nSpriteProvider) {
@@ -230,7 +239,7 @@ class EasyI18nManager {
 			const atlasUuid = result[0];
 			const spriteFrameUuid = result[1];
 			const atlas = this.spriteProvider?.getAtlas(atlasUuid);
-			const spriteFrame = atlas?.getSpriteFrame(spriteFrameUuid);
+			const spriteFrame = getSpriteFrameByUuid(atlas, spriteFrameUuid);
 
 			return {
 				atlas: atlas,
@@ -274,7 +283,6 @@ export function initSpriteProviderMap(spriteProvider: II18nSpriteProvider): void
 		spriteProvider.atlasUuidMap.set(atlas.name, atlas);
 		for (const spriteFrame of atlas.getSpriteFrames()) {
 			if (!spriteFrame) continue;
-
 			spriteProvider.infoUuidMap.set(spriteFrame.uuid, {
 				spriteFrame: spriteFrame,
 				atlas: atlas
@@ -294,23 +302,29 @@ export function setOptions(target: UIRenderer, options: I18nBaseOptions | null):
 		if (options.anchorPoint) {
 			uiTransform.setAnchorPoint(options.anchorPoint.x, options.anchorPoint.y);
 		}
+	}
+	if (options.color) {
+		target.color = new Color(options.color[0], options.color[1], options.color[2], options.color[3]);
+	} 
+}
 
-		if (options.color) {
-			target.color = new Color(options.color[0], options.color[1], options.color[2], options.color[3]);
-		} else {
-			target.color = new Color(255, 255, 255, 255);
+function log(message: string, ...args: any[]) {
+	console.log(`[EasyI18n] ${message}`, ...args);
+}
+
+function warn(message: string, ...args: any[]) {
+	console.warn(`[EasyI18n] ${message}`, ...args);
+}
+
+function error(message: string, ...args: any[]) {
+	console.error(`[EasyI18n] ${message}`, ...args);
+}
+
+export function getSpriteFrameByUuid(spriteAtlas: SpriteAtlas, uuid: string): SpriteFrame | null {
+	for (const spriteFrame of spriteAtlas.getSpriteFrames()) {
+		if (spriteFrame.uuid === uuid) {
+			return spriteFrame;
 		}
 	}
-}
-
-function log(message: string) {
-	console.log(`[EasyI18n] ${message}`);
-}
-
-function warn(message: string) {
-	console.warn(`[EasyI18n] ${message}`);
-}
-
-function error(message: string) {
-	console.error(`[EasyI18n] ${message}`);
+	return null;
 }

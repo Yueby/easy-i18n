@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineEmits, defineProps } from 'vue';
+import { defineEmits, defineProps, onBeforeUnmount, onMounted } from 'vue';
 
 interface Props {
     /**
@@ -22,6 +22,11 @@ const emit = defineEmits<{
      * 用户点击保存按钮时触发
      */
     (e: 'save'): void;
+    
+    /**
+     * 用户点击转移按钮时触发
+     */
+    (e: 'transfer'): void;
 }>();
 
 // 处理目录变更
@@ -37,8 +42,30 @@ const handleSave = () => {
 
 // 处理转移按钮点击
 const handleTransfer = () => {
-    // emit('transfer');
+    emit('transfer');
 };
+
+// 处理键盘事件，检测Ctrl+S
+const handleKeyDown = (event: KeyboardEvent) => {
+    // 检测Ctrl+S (Windows/Linux) 或 Command+S (Mac)
+    if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+        // 阻止默认的浏览器保存行为
+        event.preventDefault();
+
+        // 触发保存
+        handleSave();
+    }
+};
+
+// 在组件挂载后添加键盘事件监听
+onMounted(() => {
+    window.addEventListener('keydown', handleKeyDown);
+});
+
+// 在组件卸载前移除键盘事件监听
+onBeforeUnmount(() => {
+    window.removeEventListener('keydown', handleKeyDown);
+});
 </script>
 
 <template>
@@ -52,7 +79,7 @@ const handleTransfer = () => {
 
         <ui-prop>
             <ui-label slot="label">操作</ui-label>
-            <ui-button slot="content" @click="handleSave" tooltip="保存文件">
+            <ui-button slot="content" @click="handleSave" tooltip="保存文件 (Ctrl+S)">
                 <ui-icon value="save"></ui-icon>
             </ui-button>
             <ui-button slot="content" @click="handleTransfer" tooltip="转移文件">

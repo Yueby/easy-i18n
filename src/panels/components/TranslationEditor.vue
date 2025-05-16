@@ -32,6 +32,11 @@ const emit = defineEmits<{
      * 翻译键变化时触发
      */
     (e: 'change', translations: { key: string, item: I18nItem; }[]): void;
+    
+    /**
+     * 触发保存功能
+     */
+    (e: 'save'): void;
 }>();
 
 // 当前选中的翻译键索引
@@ -65,6 +70,11 @@ const newKeyName = ref('');
 const newKeyDefaultValue = ref('');
 const keyError = ref('');
 
+// 编辑键名模态窗口控制
+const showEditKeyModal = ref(false);
+const editKeyName = ref('');
+const editKeyError = ref('');
+
 // 处理选择翻译键
 const handleSelectKey = (_: { key: string, item: I18nItem; }, index: number) => {
     selectedKeyIndex.value = index;
@@ -79,28 +89,35 @@ const handleAddKey = () => {
 };
 
 // 检查键名是否有效
-const validateKeyName = (keyName: string): boolean => {
+const validateKeyName = (keyName: string, originalKey?: string): boolean => {
     // 不能为空
     if (!keyName.trim()) {
         keyError.value = '键名不能为空';
+        editKeyError.value = '键名不能为空';
         return false;
     }
 
     // 检查格式 (允许字母、数字、点、下划线和短横线)
     if (!/^[a-zA-Z0-9_\-.]+$/.test(keyName)) {
         keyError.value = '键名只能包含字母、数字、点、下划线和短横线';
+        editKeyError.value = '键名只能包含字母、数字、点、下划线和短横线';
         return false;
     }
 
-    // 检查是否已存在
-    const exists = props.translations.some(item => item.key === keyName);
+    // 检查是否已存在（编辑时排除自身）
+    const exists = props.translations.some(item => 
+        item.key === keyName && item.key !== originalKey
+    );
+    
     if (exists) {
         keyError.value = '该键名已存在';
+        editKeyError.value = '该键名已存在';
         return false;
     }
 
     // 清除错误提示
     keyError.value = '';
+    editKeyError.value = '';
     return true;
 };
 
@@ -134,6 +151,9 @@ const confirmAddKey = () => {
     // 触发更新事件
     emit('update:translations', updatedTranslations);
     emit('change', updatedTranslations);
+    
+    // 触发保存事件
+    emit('save');
 
     // 选择新添加的项目
     selectedKeyIndex.value = updatedTranslations.length - 1;
@@ -141,6 +161,59 @@ const confirmAddKey = () => {
     // 关闭模态窗口
     showAddKeyModal.value = false;
     logger.info('添加了新翻译键:', newKeyName.value);
+};
+
+// 打开编辑键名模态窗口
+const openEditKeyModal = () => {
+    if (selectedKeyIndex.value < 0) return;
+    
+    editKeyName.value = props.translations[selectedKeyIndex.value].key;
+    editKeyError.value = '';
+    showEditKeyModal.value = true;
+};
+
+// 确认编辑键名
+const confirmEditKey = () => {
+    if (selectedKeyIndex.value < 0) return;
+    
+    const originalKey = props.translations[selectedKeyIndex.value].key;
+    
+    // 如果键名没有变化，直接关闭
+    if (editKeyName.value === originalKey) {
+        showEditKeyModal.value = false;
+        return;
+    }
+    
+    // 验证新键名
+    if (!validateKeyName(editKeyName.value, originalKey)) {
+        return; // 验证失败，不继续执行
+    }
+    
+    // 复制翻译列表
+    const updatedTranslations = [...props.translations];
+    
+    // 更新键名
+    updatedTranslations[selectedKeyIndex.value] = {
+        key: editKeyName.value,
+        item: updatedTranslations[selectedKeyIndex.value].item
+    };
+    
+    // 触发更新事件
+    emit('update:translations', updatedTranslations);
+    emit('change', updatedTranslations);
+    
+    // 触发保存事件
+    emit('save');
+    
+    // 关闭模态窗口
+    showEditKeyModal.value = false;
+    logger.info('修改了翻译键:', originalKey, '->', editKeyName.value);
+};
+
+// 取消编辑键名
+const cancelEditKey = () => {
+    showEditKeyModal.value = false;
+    editKeyError.value = '';
 };
 
 // 删除翻译键
@@ -170,6 +243,9 @@ const confirmDeleteKey = () => {
     // 触发更新事件
     emit('update:translations', updatedTranslations);
     emit('change', updatedTranslations);
+    
+    // 触发保存事件
+    emit('save');
 };
 
 // 取消删除翻译键
@@ -373,6 +449,39 @@ defineExpose({
     validateTranslations: hasInvalidTranslations,
     getInvalidTranslations
 });
+
+// 添加复制功能
+const copyKeyToClipboard = () => {
+    if (selectedKeyIndex.value < 0) return;
+    
+    const keyName = props.translations[selectedKeyIndex.value].key;
+    
+    // 使用navigator.clipboard API复制文本到剪贴板
+    try {
+        // 创建一个临时文本区域元素
+        const textArea = document.createElement('textarea');
+        textArea.value = keyName;
+        
+        // 确保元素不可见
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        
+        // 选择并复制文本
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        
+        // 移除临时元素
+        document.body.removeChild(textArea);
+        
+        // 日志记录
+        logger.info('已复制翻译键到剪贴板:', keyName);
+    } catch (error) {
+        logger.error('复制到剪贴板失败:', error);
+    }
+};
 </script>
 
 <template>
@@ -402,7 +511,17 @@ defineExpose({
                 <!-- 右侧内容区 - 显示选中的翻译内容 -->
                 <div v-if="selectedKeyIndex >= 0" class="translation-edit">
                     <div class="translation-key-header">
-                        <ui-label class="translation-key-title" v-html="translations[selectedKeyIndex].key"></ui-label>
+                        <div class="key-title-row">
+                            <ui-label class="translation-key-title" v-html="translations[selectedKeyIndex].key"></ui-label>
+                            <div class="key-actions">
+                                <ui-button class="edit-key-btn" @click="openEditKeyModal" tooltip="编辑键名">
+                                    <ui-icon value="edit"></ui-icon>
+                                </ui-button>
+                                <ui-button class="copy-key-btn" @click="copyKeyToClipboard" tooltip="复制键名">
+                                    <ui-icon value="copy"></ui-icon>
+                                </ui-button>
+                            </div>
+                        </div>
                     </div>
                     <div class="translation-values">
                         <!-- 类型设置区 -->
@@ -464,6 +583,30 @@ defineExpose({
             </div>
         </UiModal>
 
+        <!-- 编辑键名模态窗口 -->
+        <UiModal v-model:visible="showEditKeyModal" title="编辑翻译键" okText="保存" cancelText="取消" 
+            @ok="confirmEditKey" @cancel="cancelEditKey">
+            <div class="edit-key-form">
+                <ui-prop>
+                    <ui-label slot="label">键名（Key）</ui-label>
+                    <ui-input slot="content" v-model="editKeyName" placeholder="例如: common.button.submit"
+                        @input="validateKeyName(editKeyName, props.translations[selectedKeyIndex]?.key)" 
+                        @compositionend="validateKeyName(editKeyName, props.translations[selectedKeyIndex]?.key)"></ui-input>
+                </ui-prop>
+
+                <div v-if="editKeyError" class="error-message">{{ editKeyError }}</div>
+
+                <div class="key-format-help">
+                    <ui-label>键名格式说明：</ui-label>
+                    <ul>
+                        <li>推荐使用点分隔的命名方式，例如 "module.component.text"</li>
+                        <li>建议按功能区域组织，例如 "common.button.submit"</li>
+                        <li>只能包含字母、数字、点(.)、下划线(_)和短横线(-)</li>
+                    </ul>
+                </div>
+            </div>
+        </UiModal>
+
         <!-- 删除翻译键确认模态窗口 -->
         <UiModal v-model:visible="showDeleteKeyModal" title="删除确认" okText="删除" cancelText="取消" @ok="confirmDeleteKey"
             @cancel="cancelDeleteKey">
@@ -483,8 +626,8 @@ defineExpose({
 .translation-editor {
     width: 100%;
     overflow: hidden;
-    height: 320px;
-    /* 使用固定高度 */
+    height: 450px;
+    /* 增加高度以适应更大的文本区域 */
 }
 
 .split-panel {
@@ -548,17 +691,42 @@ defineExpose({
     margin-bottom: 12px;
 }
 
+.key-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.key-actions {
+    display: flex;
+    align-items: center;
+}
+
 .translation-key-title {
     font-size: 16px;
     font-weight: bold;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.edit-key-btn, .copy-key-btn {
+    min-width: auto;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    margin-left: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .translation-values {
     flex: 1;
     overflow-y: auto;
     padding-right: 8px;
-    min-height: 200px;
-    /* 添加最小高度确保内容区域有足够空间 */
+    min-height: 300px;
+    /* 增加最小高度确保内容区域有足够空间 */
 }
 
 .warning-text {
@@ -576,7 +744,7 @@ defineExpose({
     color: var(--danger-color, #f44336);
 }
 
-.add-key-form {
+.add-key-form, .edit-key-form {
     display: flex;
     flex-direction: column;
     gap: 4px;
