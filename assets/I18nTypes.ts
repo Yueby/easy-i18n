@@ -162,31 +162,7 @@ export interface II18nJsonProvider extends II18nProvider {
 }
 
 export interface II18nSpriteProvider extends II18nProvider {
-    /**
-     * 图集列表
-     */
-    atlases?: SpriteAtlas[];
-
-    /**
-     * 图集缓存
-     */
-    atlasUuidMap: Map<string, SpriteAtlas>;
-
-    /**
-     * uuid缓存
-     */
-    infoUuidMap: Map<string, SpriteFrameInfo>;
-
-    /**
-     * 获取精灵帧
-     * @param uuid 精灵帧的uuid或名称
-     */
     getSpriteFrameInfo(uuid: string): SpriteFrameInfo | null;
-
-    /**
-     * 获取精灵图集
-     * @param uuid 图集的uuid
-     */
     getAtlas(uuid: string): SpriteAtlas | null;
 }
 

@@ -32,3 +32,4 @@ dist-ssr
 /jsb.d.ts
 /cc.d.ts
 /cc.env.d.ts
+/.history

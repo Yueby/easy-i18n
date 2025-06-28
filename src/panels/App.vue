@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import fs from 'fs';
+import path from 'path';
 import { onMounted, ref, watch } from 'vue';
 import type { I18nItem, LanguageInfo } from '../types/i18n';
 import { file } from '../utils/file';
@@ -7,10 +9,10 @@ import { profile } from '../utils/profile';
 import ControlPanel from './components/ControlPanel.vue';
 import LanguageManager from './components/LanguageManager.vue';
 import TranslationEditor from './components/TranslationEditor.vue';
-import UiModal from './components/common/UiModal.vue';
 
 // 默认导出路径
 const defaultExportPath = 'project://assets/resources/easy-i18n';
+const defaultJsonName = 'i18n-data';
 const exportPath = ref(defaultExportPath);
 
 // 语言列表数据 - 初始化为空数组
@@ -24,12 +26,6 @@ const selectedLanguageIndex = ref(-1);
 
 // 测试用的翻译键列表
 const translationKeys = ref<{ key: string, item: I18nItem; }[]>([]);
-
-// 转移相关变量
-const showTransferModal = ref(false);
-const targetPath = ref('');
-const transferMessage = ref('');
-const isTransferring = ref(false);
 
 // 加载配置的exportPath
 const loadExportPath = async () => {
@@ -62,10 +58,34 @@ watch(languages, (newLanguages) => {
     }
 }, { deep: true });
 
-// 监听exportPath变化，保存到项目配置
+// 监听exportPath变化，保存到项目配置，并同步到EasyI18n.ts
 watch(exportPath, async (newPath) => {
     if (newPath) {
         await saveExportPath(newPath);
+
+        // 只取相对于 resources 的路径部分
+        // 例如 project://assets/resources/xxx => xxx
+        const match = newPath.match(/^project:\/\/assets\/resources\/(.+)$/);
+        const relativePath = match ? match[1] : 'easy-i18n/i18n-data';
+        // 去掉末尾的 /，拼接文件名
+        const i18nPath = relativePath.replace(/\/$/, '') + '/i18n-data';
+
+        // 自动同步 assets/EasyI18n.ts 里的 I18N_DATA_PATH
+        try {
+            // 用 file.getPluginRootDir() 获取插件根目录
+            const pluginRoot = await file.getPluginRootDir();
+            const easyI18nPath = path.join(pluginRoot, 'assets', 'EasyI18n.ts');
+            let content = fs.readFileSync(easyI18nPath, 'utf-8');
+            const newLine = `export const I18N_DATA_PATH: string = '${i18nPath}';`;
+            content = content.replace(
+                /export const I18N_DATA_PATH: string = '.*?';/,
+                newLine
+            );
+            fs.writeFileSync(easyI18nPath, content, 'utf-8');
+            logger.info(`已自动同步 I18N_DATA_PATH: ${i18nPath}`);
+        } catch (error) {
+            logger.error('自动同步 I18N_DATA_PATH 失败:', error);
+        }
     }
 });
 
@@ -91,6 +111,7 @@ onMounted(async () => {
 
     // 尝试加载保存的数据
     await loadSavedData();
+
 });
 
 // 加载保存的数据
@@ -105,7 +126,7 @@ const loadSavedData = async () => {
         const url = exportPath.value.replace('project://', 'db://');
 
         // i18n数据文件路径
-        const fileUrl = `${url}/i18n-data.json`;
+        const fileUrl = `${url}/${defaultJsonName}.json`;
 
         // 检查文件是否存在
         const fileInfo = await file.queryAssetInfo(fileUrl);
@@ -280,7 +301,7 @@ const handleSaveData = async () => {
         const url = exportPath.value.replace('project://', 'db://');
 
         // 创建i18n数据文件路径
-        const fileUrl = `${url}/i18n-data.json`;
+        const fileUrl = `${url}/${defaultJsonName}.json`;
 
         // 检查文件是否已存在
         const fileInfo = await file.queryAssetInfo(fileUrl);
@@ -303,90 +324,6 @@ const handleSaveData = async () => {
         logger.error('保存数据失败:', error);
     }
 };
-
-// 处理转移文件
-const handleTransferData = async () => {
-    if (!exportPath.value) {
-        logger.warn('请先选择当前的导出目录');
-        return;
-    }
-
-    if (!targetPath.value) {
-        logger.warn('请选择目标目录');
-        return;
-    }
-
-    if (exportPath.value === targetPath.value) {
-        transferMessage.value = '当前目录与目标目录相同，无需转移';
-        return;
-    }
-
-    try {
-        isTransferring.value = true;
-        transferMessage.value = '正在转移文件...';
-
-        // 源文件URL (db://格式)
-        const sourceUrl = exportPath.value.replace('project://', 'db://');
-        const sourceFileUrl = `${sourceUrl}/i18n-data.json`;
-
-        // 目标文件URL (db://格式)
-        const targetUrl = targetPath.value.replace('project://', 'db://');
-        const targetFileUrl = `${targetUrl}/i18n-data.json`;
-
-        // 检查源文件是否存在
-        const fileInfo = await file.queryAssetInfo(sourceFileUrl);
-        if (!fileInfo) {
-            transferMessage.value = '源文件不存在，无法转移';
-            isTransferring.value = false;
-            return;
-        }
-        
-        // 检查目标目录是否存在，不存在则创建
-        const targetDirInfo = await file.queryAssetInfo(targetUrl);
-        if (!targetDirInfo) {
-            // 创建目标目录
-            await file.createAsset(`${targetUrl}/`, null);
-        }
-
-        // 移动文件
-        const success = await file.moveAsset(sourceFileUrl, targetFileUrl);
-        
-        if (success) {
-            // 更新导出路径
-            exportPath.value = targetPath.value;
-            targetPath.value = '';
-            transferMessage.value = '文件转移成功！';
-            
-            // 2秒后关闭模态窗口
-            setTimeout(() => {
-                showTransferModal.value = false;
-                transferMessage.value = '';
-                isTransferring.value = false;
-            }, 2000);
-        } else {
-            transferMessage.value = '文件转移失败，请检查权限或目录是否有效';
-            isTransferring.value = false;
-        }
-    } catch (error) {
-        transferMessage.value = `转移过程出错: ${error}`;
-        isTransferring.value = false;
-        logger.error('转移文件失败:', error);
-    }
-};
-
-// 处理目标路径变更
-const handleTargetPathChange = (path: string) => {
-    targetPath.value = path;
-    transferMessage.value = '';
-};
-
-// 打开转移文件对话框
-const openTransferDialog = () => {
-    targetPath.value = '';
-    transferMessage.value = '';
-    isTransferring.value = false;
-    showTransferModal.value = true;
-};
 </script>
 
 <template>
@@ -394,7 +331,7 @@ const openTransferDialog = () => {
         <ui-label class="title" i18n>easy-i18n.title</ui-label>
 
         <!-- 控制面板 -->
-        <ControlPanel v-model:exportPath="exportPath" @save="handleSaveData" @transfer="openTransferDialog" />
+        <ControlPanel v-model:exportPath="exportPath" @save="handleSaveData" />
 
         <!-- 语言管理器组件 -->
         <LanguageManager v-model:languages="languages" :selectedIndex="selectedLanguageIndex"
@@ -409,28 +346,6 @@ const openTransferDialog = () => {
         <div v-else class="no-language-tip">
             <ui-label>请先添加至少一种语言，然后才能进行翻译管理喵~</ui-label>
         </div>
-
-        <!-- 转移文件对话框 -->
-        <UiModal v-model:visible="showTransferModal" title="转移文件" okText="转移" cancelText="取消"
-            @ok="handleTransferData" @cancel="showTransferModal = false">
-            <div class="transfer-dialog">
-                <ui-prop>
-                    <ui-label slot="label">当前目录</ui-label>
-                    <ui-input slot="content" readonly :value="exportPath"></ui-input>
-                </ui-prop>
-
-                <ui-prop>
-                    <ui-label slot="label">目标目录</ui-label>
-                    <ui-file slot="content" type="directory" :value="targetPath" protocols="project" 
-                        placeholder="选择目标目录" @change="handleTargetPathChange($event.target.value)">
-                    </ui-file>
-                </ui-prop>
-
-                <div v-if="transferMessage" class="transfer-message" :class="{ 'success': transferMessage.includes('成功') }">
-                    {{ transferMessage }}
-                </div>
-            </div>
-        </UiModal>
     </div>
 </template>
 
@@ -457,21 +372,5 @@ const openTransferDialog = () => {
     background-color: rgba(50, 50, 50, 0.2);
     border-radius: 4px;
     border: 1px dashed rgba(127, 127, 127, 0.3);
-}
-
-.transfer-dialog {
-    padding: 8px 0;
-}
-
-.transfer-message {
-    margin-top: 16px;
-    padding: 8px 12px;
-    background-color: rgba(255, 100, 100, 0.2);
-    border-radius: 4px;
-    text-align: center;
-}
-
-.transfer-message.success {
-    background-color: rgba(100, 255, 100, 0.2);
 }
 </style>

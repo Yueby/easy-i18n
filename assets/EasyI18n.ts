@@ -1,10 +1,12 @@
-import { _decorator, assetManager, Color, JsonAsset, resources, SpriteAtlas, UIRenderer, UITransform } from 'cc';
-import { EDITOR } from 'cc/env';
-import { I18nBaseOptions, I18nData, I18nItemType, II18nJsonProvider, II18nSpriteProvider, SpriteFrameInfo } from './I18nTypes.ts';
+import { _decorator, assetManager, Color, JsonAsset, resources, SpriteAtlas, SpriteFrame, UIRenderer, UITransform } from 'cc';
+import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
+import { CUSTOM_I18N, DISABLE_LOG } from 'cc/userland/macro';
+import { I18nBaseOptions, I18nData, I18nItemType, I18nSpriteOptions, I18nTextOptions, II18nJsonProvider, II18nSpriteProvider, SpriteFrameInfo } from './I18nTypes';
+
 const { ccclass, property } = _decorator;
 
-const I18N_DATA_FILE_PATH: string = 'easy-i18n/i18n-data';
-const I18N_ATLAS_PATH: string = 'atlas/';
+export const I18N_DATA_PATH: string = 'easy-i18n/i18n-data';
+const I18N_TEXTURE_PATH: string = 'textures/';
 
 class InternalJsonProvider implements II18nJsonProvider {
 	private _json: string = '';
@@ -15,31 +17,34 @@ class InternalJsonProvider implements II18nJsonProvider {
 
 	async load(): Promise<void> {
 		return new Promise<void>((resolve, reject) => {
-			if (!EDITOR) {
-				resources.load(I18N_DATA_FILE_PATH, JsonAsset, (err, asset) => {
+			if (!EDITOR_NOT_IN_PREVIEW) {
+				resources.load(I18N_DATA_PATH, JsonAsset, (err, asset) => {
 					if (err) {
-						error(`加载国际化数据失败: ${err}`);
+						error(`加载i18n数据失败: ${err}`);
 						reject(err);
 					} else {
 						this._json = JSON.stringify(asset.json);
+
+						log('加载到i18n数据');
 						resolve();
 					}
 				});
 			} else {
 				// @ts-ignore
-				Editor.Message.request('asset-db', 'query-uuid', `db://assets/resources/${I18N_DATA_FILE_PATH}.json`).then((uuid) => {
+				Editor.Message.request('asset-db', 'query-uuid', `db://assets/resources/${I18N_DATA_PATH}.json`).then((uuid) => {
 					if (uuid) {
 						assetManager.loadAny(uuid, (err, asset) => {
 							if (err) {
-								error(`加载国际化数据失败: ${err}`);
+								error(`加载i18n数据失败: ${err}`);
 								reject(err);
 							} else {
 								this._json = JSON.stringify(asset.json);
+								log('加载到i18n数据', this._json);
 								resolve();
 							}
 						});
 					} else {
-						warn('配置文件未找到', uuid);
+						warn('i18n配置文件未找到', uuid);
 					}
 				});
 			}
@@ -48,23 +53,22 @@ class InternalJsonProvider implements II18nJsonProvider {
 
 	getJson(): string {
 		if (this._json === '') {
-			warn('国际化数据尚未加载完成，返回默认空数据');
+			warn('i18n数据为空，可能未加载完成');
 		}
 		return this._json;
 	}
 }
 
 class InternalSpriteProvider implements II18nSpriteProvider {
-	public infoUuidMap: Map<string, SpriteFrameInfo> = new Map();
-	public infoNameMap: Map<string, SpriteFrameInfo> = new Map();
-	public atlasUuidMap: Map<string, SpriteAtlas> = new Map();
-
-	public atlases: SpriteAtlas[] = [];
+	private infoUuidMap: Map<string, SpriteFrameInfo> = new Map();
+	private atlasUuidMap: Map<string, SpriteAtlas> = new Map();
+	private atlases: SpriteAtlas[] = [];
 
 	async load(): Promise<void> {
 		return new Promise<void>((resolve, reject) => {
-			if (!EDITOR) {
-				resources.loadDir(I18N_ATLAS_PATH, SpriteAtlas, (err, assets) => {
+			if (!EDITOR_NOT_IN_PREVIEW) {
+				// 先加载atlas
+				resources.loadDir(I18N_TEXTURE_PATH, SpriteAtlas, (err, assets) => {
 					if (err) {
 						error(`初始化加载图集列表失败: ${err}`);
 						reject(err);
@@ -73,14 +77,27 @@ class InternalSpriteProvider implements II18nSpriteProvider {
 							this.atlasUuidMap.set(asset.uuid, asset);
 							this.atlases.push(asset);
 						}
-						initSpriteProviderMap(this);
-						resolve();
+						this.initSpriteProviderMap();
+						// 再收集所有SpriteFrame
+						resources.loadDir(I18N_TEXTURE_PATH, SpriteFrame, (err2, spriteFrames) => {
+							if (!err2 && spriteFrames) {
+								for (const spriteFrame of spriteFrames) {
+									if (!this.infoUuidMap.has(spriteFrame.uuid)) {
+										this.infoUuidMap.set(spriteFrame.uuid, {
+											spriteFrame: spriteFrame,
+											atlas: null
+										});
+									}
+								}
+							}
+							resolve();
+						});
 					}
 				});
 			} else {
 				// @ts-ignore
 				Editor.Message.request('asset-db', 'query-assets', {
-					pattern: `db://assets/resources/${I18N_ATLAS_PATH}/**`,
+					pattern: `db://assets/resources/${I18N_TEXTURE_PATH}/**`,
 					ccType: 'cc.SpriteAtlas'
 				})
 					.then((assetInfos) => {
@@ -88,7 +105,7 @@ class InternalSpriteProvider implements II18nSpriteProvider {
 
 						assetManager.loadAny(assetUuids, (err, result) => {
 							if (err) {
-								error(`初始化加载图集列表失败: ${err}`);
+								error(`初始化加载图集资源列表失败: ${err}`);
 								reject(err);
 							} else {
 								let atlasList: SpriteAtlas[] = [];
@@ -104,17 +121,67 @@ class InternalSpriteProvider implements II18nSpriteProvider {
 									this.atlases.push(asset);
 								}
 
-								initSpriteProviderMap(this);
-								resolve();
+								this.initSpriteProviderMap();
+								// 再收集所有SpriteFrame
+								// @ts-ignore
+								Editor.Message.request('asset-db', 'query-assets', {
+									pattern: `db://assets/resources/${I18N_TEXTURE_PATH}/**`,
+									ccType: 'cc.SpriteFrame'
+								}).then((spriteFrameInfos) => {
+									// log('查询到的spriteFrameInfos:', spriteFrameInfos);
+									const spriteFrameUuids = spriteFrameInfos.map((info) => info.uuid);
+									assetManager.loadAny(spriteFrameUuids, (err2, result2) => {
+										if (!err2 && result2) {
+											let spriteFrameList: SpriteFrame[] = [];
+											if (Array.isArray(result2)) {
+												spriteFrameList = result2;
+											} else if (result2) {
+												spriteFrameList.push(result2);
+											}
+											// 过滤掉已存在于图集内的spriteFrame
+											const independentSpriteFrames = spriteFrameList.filter((spriteFrame) => {
+												const info = this.infoUuidMap.get(spriteFrame.uuid);
+												return !info || !info.atlas;
+											});
+											// log(
+											// 	'独立spriteFrame:',
+											// 	independentSpriteFrames.map((sf) => ({ uuid: sf.uuid, name: sf.name }))
+											// );
+											for (const spriteFrame of independentSpriteFrames) {
+												if (!this.infoUuidMap.has(spriteFrame.uuid)) {
+													this.infoUuidMap.set(spriteFrame.uuid, {
+														spriteFrame: spriteFrame,
+														atlas: null
+													});
+												}
+											}
+										}
+										resolve();
+									});
+								});
 							}
 						});
 					})
 					.catch((err) => {
-						error(`查询资源列表失败: ${err}`);
+						error(`查询图集资源列表失败: ${err}`);
 						reject(err);
 					});
 			}
 		});
+	}
+
+	private initSpriteProviderMap(): void {
+		if (!this.atlases) return;
+		for (const atlas of this.atlases) {
+			this.atlasUuidMap.set(atlas.name, atlas);
+			for (const spriteFrame of atlas.getSpriteFrames()) {
+				if (!spriteFrame) continue;
+				this.infoUuidMap.set(spriteFrame.uuid, {
+					spriteFrame: spriteFrame,
+					atlas: atlas
+				});
+			}
+		}
 	}
 
 	getSpriteFrameInfo(uuid: string): SpriteFrameInfo | null {
@@ -156,9 +223,7 @@ class EasyI18nManager {
 		return this._data;
 	}
 
-	constructor() {
-		this.init(new InternalJsonProvider(), new InternalSpriteProvider());
-	}
+	constructor() {}
 
 	public async init(jsonProvider: II18nJsonProvider, spriteProvider: II18nSpriteProvider) {
 		this._jsonProvider = jsonProvider;
@@ -168,6 +233,11 @@ class EasyI18nManager {
 		await this._spriteProvider.load();
 		this._data = JSON.parse(this._jsonProvider?.getJson()) as I18nData;
 		// console.log('init', this._data);
+		if (this._data) {
+			log('初始化i18n管理器成功');
+		} else {
+			error('初始化i18n管理器失败');
+		}
 	}
 
 	private async editorReload() {
@@ -195,7 +265,7 @@ class EasyI18nManager {
 	}
 
 	public async getTextTranslation(key: string): Promise<string> {
-		if (EDITOR) {
+		if (EDITOR_NOT_IN_PREVIEW) {
 			await this.editorReload();
 		}
 		if (!this.isKeyValid(key)) {
@@ -218,7 +288,7 @@ class EasyI18nManager {
 	}
 
 	public async getSpriteTranslation(key: string): Promise<SpriteFrameInfo | null> {
-		if (EDITOR) {
+		if (EDITOR_NOT_IN_PREVIEW) {
 			await this.editorReload();
 		}
 
@@ -250,7 +320,9 @@ class EasyI18nManager {
 		}
 	}
 
-	public getOptions(key: string, type: I18nItemType): I18nBaseOptions | null {
+	public getOptions(key: string, type: 'text'): I18nTextOptions | null;
+	public getOptions(key: string, type: 'sprite'): I18nSpriteOptions | null;
+	public getOptions(key: string, type: I18nItemType): I18nTextOptions | I18nSpriteOptions | null {
 		if (!this.data) {
 			error('多语言数据未加载');
 			return null;
@@ -268,26 +340,26 @@ class EasyI18nManager {
 			return null;
 		}
 
-		return valueObj.options || null;
+		switch (type) {
+			case 'text':
+				return (valueObj.options as I18nTextOptions) || null;
+			case 'sprite':
+				return (valueObj.options as I18nSpriteOptions) || null;
+		}
 	}
 }
 
 export const EasyI18n = new EasyI18nManager();
+if (!CUSTOM_I18N) {
+	await EasyI18n.init(new InternalJsonProvider(), new InternalSpriteProvider());
 
-export function initSpriteProviderMap(spriteProvider: II18nSpriteProvider): void {
-	if (!spriteProvider.atlases) return;
-	if (!spriteProvider.atlasUuidMap) spriteProvider.atlasUuidMap = new Map();
-	if (!spriteProvider.infoUuidMap) spriteProvider.infoUuidMap = new Map();
-
-	for (const atlas of spriteProvider.atlases) {
-		spriteProvider.atlasUuidMap.set(atlas.name, atlas);
-		for (const spriteFrame of atlas.getSpriteFrames()) {
-			if (!spriteFrame) continue;
-			spriteProvider.infoUuidMap.set(spriteFrame.uuid, {
-				spriteFrame: spriteFrame,
-				atlas: atlas
-			});
-		}
+	if (EDITOR_NOT_IN_PREVIEW) {
+		log('使用默认多语言提供实现，如果想使用自定义实现，请在宏定义中定义CUSTOM_I18N并勾选。');
+		log('另外还需在resources目录中添加textures文件夹，并添加图集或SpriteFrame资源。');
+	}
+} else {
+	if (EDITOR_NOT_IN_PREVIEW) {
+		log('使用自定义多语言提供实现，如果想使用默认实现，请在宏定义中取消CUSTOM_I18N勾选或者删除宏定义。');
 	}
 }
 
@@ -305,18 +377,27 @@ export function setOptions(target: UIRenderer, options: I18nBaseOptions | null):
 	}
 	if (options.color) {
 		target.color = new Color(options.color[0], options.color[1], options.color[2], options.color[3]);
-	} 
+	}
 }
 
 function log(message: string, ...args: any[]) {
+	if (DISABLE_LOG) {
+		return;
+	}
 	console.log(`[EasyI18n] ${message}`, ...args);
 }
 
 function warn(message: string, ...args: any[]) {
+	if (DISABLE_LOG) {
+		return;
+	}
 	console.warn(`[EasyI18n] ${message}`, ...args);
 }
 
 function error(message: string, ...args: any[]) {
+	if (DISABLE_LOG) {
+		return;
+	}
 	console.error(`[EasyI18n] ${message}`, ...args);
 }
 

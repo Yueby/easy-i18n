@@ -79,18 +79,6 @@ const text = computed({
     }
 });
 
-// 友好的精灵资源ID（用于显示）
-const friendlyResourceId = computed(() => {
-    const rawText = props.item.value[props.languageCode]?.text || '';
-
-    // 如果是图片模式并且是组合格式（atlas:spriteFrame），则显示友好名称
-    if (props.item.type === 'sprite' && rawText && rawText.includes(':')) {
-        return "图集精灵资源"; // 可以根据需要修改这个显示文本
-    }
-
-    return rawText;
-});
-
 // 获取当前语言的翻译文本（返回原始存储的文本，当需要原始文本时使用）
 const getTranslationText = () => {
     return langValue.value.text || '';
@@ -288,7 +276,8 @@ const updateAnchorPoint = (dimension: 'x' | 'y', value: number) => {
                         <!-- 上部分翻译框 -->
                         <ui-prop>
                             <ui-label slot="label">翻译ID</ui-label>
-                            <ui-input slot="content" :value="getTranslationText()" readonly :placeholder="`精灵图片uuid`"></ui-input>
+                            <ui-input slot="content" :value="getTranslationText()" readonly
+                                :placeholder="`精灵图片uuid`"></ui-input>
                         </ui-prop>
 
                         <!-- 下部分图片资源拖拽框 -->
