@@ -1,7 +1,7 @@
 {
     "name": "easy-i18n",
     "private": true,
-    "version": "0.0.3",
+    "version": "0.0.8",
     "package_version": 2,
     "type": "module",
     "main": "./dist/browser.cjs",
@@ -44,7 +44,8 @@
                 "path": "./assets",
                 "readonly": true
             }
-        }
+        },
+        "builder": "./dist/builder.cjs"
     },
     "panels": {
         "default": {

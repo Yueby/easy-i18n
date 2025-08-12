@@ -2,6 +2,7 @@
 import fs from 'fs';
 import path from 'path';
 import { onMounted, ref, watch } from 'vue';
+import { CONFIG_KEY, DEFAULT } from '../config';
 import type { I18nItem, LanguageInfo } from '../types/i18n';
 import { file } from '../utils/file';
 import { logger } from '../utils/logger';
@@ -11,8 +12,8 @@ import LanguageManager from './components/LanguageManager.vue';
 import TranslationEditor from './components/TranslationEditor.vue';
 
 // 默认导出路径
-const defaultExportPath = 'project://assets/resources/easy-i18n';
-const defaultJsonName = 'i18n-data';
+const defaultExportPath = DEFAULT.EXPORT_PATH;
+const defaultJsonName = DEFAULT.JSON_NAME;
 const exportPath = ref(defaultExportPath);
 
 // 语言列表数据 - 初始化为空数组
@@ -29,7 +30,7 @@ const translationKeys = ref<{ key: string, item: I18nItem; }[]>([]);
 
 // 加载配置的exportPath
 const loadExportPath = async () => {
-    const savedPath = await profile.getProject('exportPath');
+    const savedPath = await profile.getProject(CONFIG_KEY.EXPORT_PATH);
     if (savedPath) {
         exportPath.value = savedPath;
     }
@@ -37,7 +38,7 @@ const loadExportPath = async () => {
 
 // 保存配置的exportPath
 const saveExportPath = async (path: string) => {
-    await profile.setProject('exportPath', path);
+    await profile.setProject(CONFIG_KEY.EXPORT_PATH, path);
 };
 
 // 监听语言列表变化，自动处理默认语言
@@ -68,7 +69,7 @@ watch(exportPath, async (newPath) => {
         const match = newPath.match(/^project:\/\/assets\/resources\/(.+)$/);
         const relativePath = match ? match[1] : 'easy-i18n/i18n-data';
         // 去掉末尾的 /，拼接文件名
-        const i18nPath = relativePath.replace(/\/$/, '') + '/i18n-data';
+        const i18nPath = relativePath.replace(/\/$/, '') + '/' + defaultJsonName;
 
         // 自动同步 assets/EasyI18n.ts 里的 I18N_DATA_PATH
         try {
@@ -82,7 +83,7 @@ watch(exportPath, async (newPath) => {
                 newLine
             );
             fs.writeFileSync(easyI18nPath, content, 'utf-8');
-            logger.info(`已自动同步 I18N_DATA_PATH: ${i18nPath}`);
+            logger.log(`已自动同步 I18N_DATA_PATH: ${i18nPath}`);
         } catch (error) {
             logger.error('自动同步 I18N_DATA_PATH 失败:', error);
         }
@@ -109,9 +110,15 @@ onMounted(async () => {
     // 从配置加载导出路径
     await loadExportPath();
 
+    // 如果没有配置路径，设置一个默认路径并保存
+    if (!exportPath.value) {
+        exportPath.value = defaultExportPath;
+        await saveExportPath(exportPath.value);
+        logger.log('已设置默认导出路径:', defaultExportPath);
+    }
+
     // 尝试加载保存的数据
     await loadSavedData();
-
 });
 
 // 加载保存的数据
@@ -122,6 +129,9 @@ const loadSavedData = async () => {
             return;
         }
 
+        // 确保保存当前的路径配置
+        await saveExportPath(exportPath.value);
+
         // 转换为db://格式用于API调用
         const url = exportPath.value.replace('project://', 'db://');
 
@@ -131,7 +141,7 @@ const loadSavedData = async () => {
         // 检查文件是否存在
         const fileInfo = await file.queryAssetInfo(fileUrl);
         if (!fileInfo) {
-            logger.info('未找到已保存的数据文件');
+            logger.log('未找到已保存的数据文件');
             return;
         }
 
@@ -180,7 +190,7 @@ const loadSavedData = async () => {
                 selectedLanguageIndex.value = 0;
             }
 
-            logger.info('已成功加载数据');
+            logger.log('已成功加载数据');
         } catch (e) {
             logger.error('解析数据JSON失败:', e);
         }
@@ -197,6 +207,9 @@ const handleSaveData = async () => {
     }
 
     try {
+        // 确保先保存路径配置
+        await saveExportPath(exportPath.value);
+        
         // 构建数据对象
         const i18nData = {
             languages: languages.value,
@@ -316,7 +329,9 @@ const handleSaveData = async () => {
         }
 
         if (result) {
-            logger.info('数据保存成功!', fileUrl);
+            logger.log('数据保存成功!', fileUrl);
+            // 确保在成功保存后再次更新路径配置，以防之前的保存失败
+            await saveExportPath(exportPath.value);
         } else {
             logger.error('保存数据失败');
         }

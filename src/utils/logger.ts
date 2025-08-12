@@ -18,41 +18,36 @@ function getPrefix(): string {
  * @param message 日志信息
  * @param optionalParams 额外参数
  */
-function debug(message: string, ...optionalParams: any[]): void {
-    console.debug(`${getPrefix()} ${message}`, ...optionalParams);
-}
+const debug =  console.debug.bind(console,`${getPrefix()}`);
 
 /**
  * 输出普通信息
  * @param message 日志信息
  * @param optionalParams 额外参数
  */
-function info(message: string, ...optionalParams: any[]): void {
-    console.info(`${getPrefix()} ${message}`, ...optionalParams);
-}
+const info =  console.info.bind(console,`${getPrefix()}`);
+
+const log =  console.log.bind(console,`${getPrefix()}`);
 
 /**
  * 输出警告信息
  * @param message 日志信息
  * @param optionalParams 额外参数
  */
-function warn(message: string, ...optionalParams: any[]): void {
-    console.warn(`${getPrefix()} ${message}`, ...optionalParams);
-}
+const warn =  console.warn.bind(console,`${getPrefix()}`);
 
 /**
  * 输出错误信息
  * @param message 日志信息
  * @param optionalParams 额外参数
  */
-function error(message: string, ...optionalParams: any[]): void {
-    console.error(`${getPrefix()} ${message}`, ...optionalParams);
-}
+const error =  console.error.bind(console,`${getPrefix()}`);
 
 // 导出logger对象的命名版本，这样既能保持兼容也能统一风格
 export const logger = {
     debug,
     info,
+    log,
     warn,
     error
 };

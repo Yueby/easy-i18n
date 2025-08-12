@@ -30,6 +30,14 @@ export interface Vec2 {
 //#region 国际化类型
 
 /**
+ * 组件类型枚举
+ */
+export enum ComponentType {
+    LABEL = 'Label',
+    SPRITE = 'Sprite'
+}
+
+/**
  * 基础国际化选项接口
  */
 export interface I18nBaseOptions {

@@ -69,7 +69,7 @@ async function copyDir(src: string, dest: string) {
  */
 async function autoUpdate(localDir: string) {
 	try {
-		logger.info('开始更新');
+		logger.log('开始更新');
 
 		// 获取目标目录 (排除 node_modules 和 .git 目录)
 		const ignorePatterns = ['node_modules', '.git'];
@@ -102,7 +102,7 @@ async function autoUpdate(localDir: string) {
 			}
 		}
 
-		logger.info('更新完成');
+		logger.log('更新完成');
 		return true;
 	} catch (error) {
 		logger.error(`更新失败: ${error}`);

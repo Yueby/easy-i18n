@@ -32,7 +32,7 @@ const emit = defineEmits<{
      * 翻译键变化时触发
      */
     (e: 'change', translations: { key: string, item: I18nItem; }[]): void;
-    
+
     /**
      * 触发保存功能
      */
@@ -51,12 +51,12 @@ watch(() => props.translations, (translations) => {
     // 如果列表为空，重置选择
     else if (translations.length === 0 && selectedKeyIndex.value !== -1) {
         selectedKeyIndex.value = -1;
-        logger.info('翻译键列表为空，清除选择');
+        logger.log('翻译键列表为空，清除选择');
     }
     // 如果当前选中的索引超出范围，重置为第一个
     else if (selectedKeyIndex.value >= translations.length && translations.length > 0) {
         selectedKeyIndex.value = 0;
-        logger.info('选中索引超出范围，重置为第一个:', translations[0].key);
+        logger.log('选中索引超出范围，重置为第一个:', translations[0].key);
     }
 }, { immediate: true });
 
@@ -105,10 +105,10 @@ const validateKeyName = (keyName: string, originalKey?: string): boolean => {
     }
 
     // 检查是否已存在（编辑时排除自身）
-    const exists = props.translations.some(item => 
+    const exists = props.translations.some(item =>
         item.key === keyName && item.key !== originalKey
     );
-    
+
     if (exists) {
         keyError.value = '该键名已存在';
         editKeyError.value = '该键名已存在';
@@ -151,7 +151,7 @@ const confirmAddKey = () => {
     // 触发更新事件
     emit('update:translations', updatedTranslations);
     emit('change', updatedTranslations);
-    
+
     // 触发保存事件
     emit('save');
 
@@ -160,13 +160,13 @@ const confirmAddKey = () => {
 
     // 关闭模态窗口
     showAddKeyModal.value = false;
-    logger.info('添加了新翻译键:', newKeyName.value);
+    logger.log('添加了新翻译键:', newKeyName.value);
 };
 
 // 打开编辑键名模态窗口
 const openEditKeyModal = () => {
     if (selectedKeyIndex.value < 0) return;
-    
+
     editKeyName.value = props.translations[selectedKeyIndex.value].key;
     editKeyError.value = '';
     showEditKeyModal.value = true;
@@ -175,39 +175,39 @@ const openEditKeyModal = () => {
 // 确认编辑键名
 const confirmEditKey = () => {
     if (selectedKeyIndex.value < 0) return;
-    
+
     const originalKey = props.translations[selectedKeyIndex.value].key;
-    
+
     // 如果键名没有变化，直接关闭
     if (editKeyName.value === originalKey) {
         showEditKeyModal.value = false;
         return;
     }
-    
+
     // 验证新键名
     if (!validateKeyName(editKeyName.value, originalKey)) {
         return; // 验证失败，不继续执行
     }
-    
+
     // 复制翻译列表
     const updatedTranslations = [...props.translations];
-    
+
     // 更新键名
     updatedTranslations[selectedKeyIndex.value] = {
         key: editKeyName.value,
         item: updatedTranslations[selectedKeyIndex.value].item
     };
-    
+
     // 触发更新事件
     emit('update:translations', updatedTranslations);
     emit('change', updatedTranslations);
-    
+
     // 触发保存事件
     emit('save');
-    
+
     // 关闭模态窗口
     showEditKeyModal.value = false;
-    logger.info('修改了翻译键:', originalKey, '->', editKeyName.value);
+    logger.log('修改了翻译键:', originalKey, '->', editKeyName.value);
 };
 
 // 取消编辑键名
@@ -243,7 +243,7 @@ const confirmDeleteKey = () => {
     // 触发更新事件
     emit('update:translations', updatedTranslations);
     emit('change', updatedTranslations);
-    
+
     // 触发保存事件
     emit('save');
 };
@@ -453,31 +453,31 @@ defineExpose({
 // 添加复制功能
 const copyKeyToClipboard = () => {
     if (selectedKeyIndex.value < 0) return;
-    
+
     const keyName = props.translations[selectedKeyIndex.value].key;
-    
+
     // 使用navigator.clipboard API复制文本到剪贴板
     try {
         // 创建一个临时文本区域元素
         const textArea = document.createElement('textarea');
         textArea.value = keyName;
-        
+
         // 确保元素不可见
         textArea.style.position = 'fixed';
         textArea.style.left = '-999999px';
         textArea.style.top = '-999999px';
         document.body.appendChild(textArea);
-        
+
         // 选择并复制文本
         textArea.focus();
         textArea.select();
         document.execCommand('copy');
-        
+
         // 移除临时元素
         document.body.removeChild(textArea);
-        
+
         // 日志记录
-        logger.info('已复制翻译键到剪贴板:', keyName);
+        logger.log('已复制翻译键到剪贴板:', keyName);
     } catch (error) {
         logger.error('复制到剪贴板失败:', error);
     }
@@ -512,7 +512,8 @@ const copyKeyToClipboard = () => {
                 <div v-if="selectedKeyIndex >= 0" class="translation-edit">
                     <div class="translation-key-header">
                         <div class="key-title-row">
-                            <ui-label class="translation-key-title" v-html="translations[selectedKeyIndex].key"></ui-label>
+                            <ui-label class="translation-key-title"
+                                v-html="translations[selectedKeyIndex].key"></ui-label>
                             <div class="key-actions">
                                 <ui-button class="edit-key-btn" @click="openEditKeyModal" tooltip="编辑键名">
                                     <ui-icon value="edit"></ui-icon>
@@ -584,13 +585,13 @@ const copyKeyToClipboard = () => {
         </UiModal>
 
         <!-- 编辑键名模态窗口 -->
-        <UiModal v-model:visible="showEditKeyModal" title="编辑翻译键" okText="保存" cancelText="取消" 
-            @ok="confirmEditKey" @cancel="cancelEditKey">
+        <UiModal v-model:visible="showEditKeyModal" title="编辑翻译键" okText="保存" cancelText="取消" @ok="confirmEditKey"
+            @cancel="cancelEditKey">
             <div class="edit-key-form">
                 <ui-prop>
                     <ui-label slot="label">键名（Key）</ui-label>
                     <ui-input slot="content" v-model="editKeyName" placeholder="例如: common.button.submit"
-                        @input="validateKeyName(editKeyName, props.translations[selectedKeyIndex]?.key)" 
+                        @input="validateKeyName(editKeyName, props.translations[selectedKeyIndex]?.key)"
                         @compositionend="validateKeyName(editKeyName, props.translations[selectedKeyIndex]?.key)"></ui-input>
                 </ui-prop>
 
@@ -710,7 +711,8 @@ const copyKeyToClipboard = () => {
     text-overflow: ellipsis;
 }
 
-.edit-key-btn, .copy-key-btn {
+.edit-key-btn,
+.copy-key-btn {
     min-width: auto;
     width: 24px;
     height: 24px;
@@ -744,7 +746,8 @@ const copyKeyToClipboard = () => {
     color: var(--danger-color, #f44336);
 }
 
-.add-key-form, .edit-key-form {
+.add-key-form,
+.edit-key-form {
     display: flex;
     flex-direction: column;
     gap: 4px;

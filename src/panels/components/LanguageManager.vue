@@ -48,7 +48,7 @@ const emit = defineEmits<{
      * 默认语言变更时触发
      */
     (e: 'update:defaultLanguage', code: string): void;
-    
+
     /**
      * 触发保存功能
      */
@@ -80,14 +80,14 @@ const openAddLanguageModal = () => {
 
 // 添加语言确认
 const confirmAddLanguage = () => {
-    if (!newLanguageName.value || !newLanguageCode.value) {
-        logger.warn('语言名称和代码不能为空');
+    if (!newLanguageCode.value) {
+        logger.warn('语言代码不能为空');
         return;
     }
 
     // 创建新语言
     const newLanguage = {
-        name: newLanguageName.value,
+        name: newLanguageName.value || newLanguageCode.value, // 如果名称为空，使用代码作为名称
         code: newLanguageCode.value
     };
 
@@ -98,9 +98,15 @@ const confirmAddLanguage = () => {
     emit('update:languages', updatedLanguages);
     emit('change', updatedLanguages);
 
-    logger.info('添加了新语言:', newLanguageName.value, `(${newLanguageCode.value})`);
+    // 如果是第一个添加的语言，自动选择它并设为默认语言
+    if (props.languages.length === 0) {
+        emit('select', newLanguage, 0);
+        emit('update:defaultLanguage', newLanguage.code);
+    }
+
+    logger.log('添加了新语言:', newLanguage.name, `(${newLanguageCode.value})`);
     showAddLanguageModal.value = false;
-    
+
     // 触发保存事件
     emit('save');
 };
@@ -131,8 +137,8 @@ const handleRemoveLanguage = (item: LanguageInfo, index: number) => {
         emit('update:defaultLanguage', '');
     }
 
-    logger.info('删除了语言:', item.name);
-    
+    logger.log('删除了语言:', item.name);
+
     // 触发保存事件
     emit('save');
 };
@@ -151,8 +157,8 @@ const openRenameLanguageModal = (index: number) => {
 // 确认改名语言
 const confirmRenameLanguage = () => {
     if (editingLanguageIndex.value < 0) return;
-    if (!editLanguageName.value || !editLanguageCode.value) {
-        logger.warn('语言名称和代码不能为空');
+    if (!editLanguageCode.value) {
+        logger.warn('语言代码不能为空');
         return;
     }
 
@@ -162,7 +168,7 @@ const confirmRenameLanguage = () => {
 
     // 更新语言信息
     updatedLanguages[editingLanguageIndex.value] = {
-        name: editLanguageName.value,
+        name: editLanguageName.value || editLanguageCode.value, // 如果名称为空，使用代码作为名称
         code: editLanguageCode.value
     };
 
@@ -175,10 +181,10 @@ const confirmRenameLanguage = () => {
     emit('update:languages', updatedLanguages);
     emit('change', updatedLanguages);
 
-    logger.info('修改了语言:', oldLanguage.name, '->', editLanguageName.value);
+    logger.log('修改了语言:', oldLanguage.name, '->', editLanguageName.value || editLanguageCode.value);
     showRenameLanguageModal.value = false;
     editingLanguageIndex.value = -1;
-    
+
     // 触发保存事件
     emit('save');
 };
@@ -214,8 +220,8 @@ const setAsDefaultLanguage = (index: number) => {
         emit('select', updatedLanguages[0], 0);
     }
 
-    logger.info('设置默认语言:', targetLanguage.name, `(${targetLanguage.code})`);
-    
+    logger.log('设置默认语言:', targetLanguage.name, `(${targetLanguage.code})`);
+
     // 触发保存事件
     emit('save');
 };
@@ -258,14 +264,14 @@ const isDefaultLanguage = (item: LanguageInfo | undefined) => {
             @ok="confirmAddLanguage">
             <div class="language-form">
                 <ui-prop>
-                    <ui-label slot="label">语言名称</ui-label>
-                    <ui-input slot="content" v-model="newLanguageName" placeholder="例如：繁體中文"
+                    <ui-label slot="label">语言代码 <span class="required">*</span></ui-label>
+                    <ui-input slot="content" v-model="newLanguageCode" placeholder="例如：zh-tw"
                         @compositionend="() => { }"></ui-input>
                 </ui-prop>
 
                 <ui-prop>
-                    <ui-label slot="label">语言代码</ui-label>
-                    <ui-input slot="content" v-model="newLanguageCode" placeholder="例如：zh-tw"
+                    <ui-label slot="label">语言名称 <span class="optional">(可选)</span></ui-label>
+                    <ui-input slot="content" v-model="newLanguageName" placeholder="例如：繁體中文"
                         @compositionend="() => { }"></ui-input>
                 </ui-prop>
             </div>
@@ -276,14 +282,14 @@ const isDefaultLanguage = (item: LanguageInfo | undefined) => {
             @ok="confirmRenameLanguage">
             <div class="language-form">
                 <ui-prop>
-                    <ui-label slot="label">语言名称</ui-label>
-                    <ui-input slot="content" v-model="editLanguageName" placeholder="例如：繁體中文"
+                    <ui-label slot="label">语言代码 <span class="required">*</span></ui-label>
+                    <ui-input slot="content" v-model="editLanguageCode" placeholder="例如：zh-tw"
                         @compositionend="() => { }"></ui-input>
                 </ui-prop>
 
                 <ui-prop>
-                    <ui-label slot="label">语言代码</ui-label>
-                    <ui-input slot="content" v-model="editLanguageCode" placeholder="例如：zh-tw"
+                    <ui-label slot="label">语言名称 <span class="optional">(可选)</span></ui-label>
+                    <ui-input slot="content" v-model="editLanguageName" placeholder="例如：繁體中文"
                         @compositionend="() => { }"></ui-input>
                 </ui-prop>
             </div>
@@ -316,5 +322,14 @@ const isDefaultLanguage = (item: LanguageInfo | undefined) => {
 .set-default-btn {
     font-size: 12px;
     padding: 2px 8px;
+}
+
+.required {
+    color: #e88080;
+}
+
+.optional {
+    color: #aaa;
+    font-size: 12px;
 }
 </style>

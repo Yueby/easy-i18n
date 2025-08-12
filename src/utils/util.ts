@@ -154,7 +154,7 @@ export async function retry<T>(fn: () => Promise<T>, retries = 3, delayMs = 300)
         }
 
         await delay(delayMs);
-        logger.info(`重试操作，剩余${retries - 1}次尝试`);
+        logger.log(`重试操作，剩余${retries - 1}次尝试`);
         return retry(fn, retries - 1, delayMs);
     }
 }
@@ -195,7 +195,7 @@ export function timeIt<T>(name: string, fn: () => T): T {
     const startTime = Date.now();
     const result = fn();
     const endTime = Date.now();
-    logger.info(`${name} 耗时: ${endTime - startTime}ms`);
+    logger.log(`${name} 耗时: ${endTime - startTime}ms`);
     return result;
 }
 

@@ -5,6 +5,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { name as packageName } from '../../package.json' with { type: 'json' };
 import { logger } from './logger';
 import { util } from './util';
 
@@ -389,28 +390,6 @@ function writeFile(filePath: string, content: string, ensureDirExists = true): b
 }
 
 /**
- * 创建临时文件
- * @param fileName 文件名
- * @param content 文件内容
- * @returns 临时文件的绝对路径或null（如果创建失败）
- */
-async function createTempFile(fileName: string, content: string): Promise<string | null> {
-	try {
-		const tempDir = await getTempDir();
-		const filePath = path.join(tempDir, fileName);
-
-		if (writeFile(filePath, content)) {
-			return filePath;
-		}
-
-		return null;
-	} catch (error) {
-		logger.error(`创建临时文件失败: ${error}`);
-		return null;
-	}
-}
-
-/**
  * 删除文件
  * @param filePath 文件路径
  * @returns 操作是否成功
@@ -451,28 +430,12 @@ async function getPluginRootDir(): Promise<string> {
 	}
 }
 
-/**
- * 获取临时文件目录
- * @returns 临时文件目录的绝对路径
- */
-async function getTempDir(): Promise<string> {
-	try {
-		// 先获取插件根目录
-		const rootDir = await getPluginRootDir();
-		// 在插件根目录下创建temp目录
-		const tempDir = path.join(rootDir, 'temp');
+function getProjectDir(): string {
+	return Editor.Project.path;
+}
 
-		// 确保目录存在
-		ensureDir(tempDir);
-
-		return tempDir;
-	} catch (error) {
-		logger.error(`获取临时目录失败: ${error}`);
-		// 如果失败，返回相对路径
-		const tempDir = path.join(__dirname, '../temp');
-		ensureDir(tempDir);
-		return tempDir;
-	}
+function getProjectTempDir(): string {
+	return Editor.Project.tmpDir;
 }
 
 /**
@@ -604,6 +567,15 @@ function pathToAssetDbUrl(fsPath: string): string {
 		return fsPath;
 	}
 }
+
+/**
+ * 获取备份根目录
+ * @returns 备份根目录绝对路径
+ */
+function getPluginTempDir(): string {
+	const projectTempDir = getProjectTempDir();
+	return path.join(projectTempDir, packageName);
+}
 //#endregion
 
 /**
@@ -615,10 +587,8 @@ export const file = {
 	fileExists,
 	ensureDir,
 	getPluginRootDir,
-	getTempDir,
 	readFile,
 	writeFile,
-	createTempFile,
 	deleteFile,
 	getAssetRelativePath,
 	getAssetDbUrl,
@@ -632,5 +602,8 @@ export const file = {
 	createAsset,
 	deleteAsset,
 	queryAssetInfo,
-	saveAsset
+	saveAsset,
+	getProjectDir,
+	getProjectTempDir,
+	getPluginTempDir
 };

@@ -1,4 +1,5 @@
-import { name } from '../../package.json' with {type: 'json'};
+import { name } from '../../package.json' with { type: 'json' };
+import { logger } from "../utils/logger";
 
 export const methods = {
     async open() {
@@ -7,9 +8,9 @@ export const methods = {
 };
 
 export async function load() {
-    console.log(`load ${name}`);    
+    logger.log(`load`);    
 }
 
 export function unload() {
-    console.log(`unload ${name}`);
+    logger.log(`unload`);
 }

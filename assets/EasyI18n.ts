@@ -1,6 +1,6 @@
 import { _decorator, assetManager, Color, JsonAsset, resources, SpriteAtlas, SpriteFrame, UIRenderer, UITransform } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
-import { CUSTOM_I18N, DISABLE_LOG } from 'cc/userland/macro';
+import { ENABLE_LOG } from 'cc/userland/macro';
 import { I18nBaseOptions, I18nData, I18nItemType, I18nSpriteOptions, I18nTextOptions, II18nJsonProvider, II18nSpriteProvider, SpriteFrameInfo } from './I18nTypes';
 
 const { ccclass, property } = _decorator;
@@ -25,28 +25,34 @@ class InternalJsonProvider implements II18nJsonProvider {
 					} else {
 						this._json = JSON.stringify(asset.json);
 
-						log('加载到i18n数据');
+						// log('加载到i18n数据');
 						resolve();
 					}
 				});
 			} else {
 				// @ts-ignore
-				Editor.Message.request('asset-db', 'query-uuid', `db://assets/resources/${I18N_DATA_PATH}.json`).then((uuid) => {
-					if (uuid) {
-						assetManager.loadAny(uuid, (err, asset) => {
-							if (err) {
-								error(`加载i18n数据失败: ${err}`);
-								reject(err);
-							} else {
-								this._json = JSON.stringify(asset.json);
-								log('加载到i18n数据', this._json);
-								resolve();
-							}
-						});
-					} else {
-						warn('i18n配置文件未找到', uuid);
-					}
-				});
+				Editor.Message.request('asset-db', 'query-uuid', `db://assets/resources/${I18N_DATA_PATH}.json`)
+					.then((uuid) => {
+						if (uuid) {
+							assetManager.loadAny(uuid, (err, asset) => {
+								if (err) {
+									error(`加载i18n数据失败: ${err}`);
+									reject(err);
+								} else {
+									this._json = JSON.stringify(asset.json);
+									// log('加载到i18n数据', this._json);
+									resolve();
+								}
+							});
+						} else {
+							warn('i18n配置文件未找到', uuid);
+							resolve();
+						}
+					})
+					.catch((err) => {
+						error(`查询i18n配置文件失败: ${err}`);
+						resolve();
+					});
 			}
 		});
 	}
@@ -231,12 +237,21 @@ class EasyI18nManager {
 
 		await this._jsonProvider.load();
 		await this._spriteProvider.load();
-		this._data = JSON.parse(this._jsonProvider?.getJson()) as I18nData;
-		// console.log('init', this._data);
-		if (this._data) {
-			log('初始化i18n管理器成功');
-		} else {
-			error('初始化i18n管理器失败');
+
+		const jsonString = this._jsonProvider?.getJson();
+		if (!jsonString || jsonString === '') {
+			warn('i18n数据为空，初始化失败');
+			return;
+		}
+
+		try {
+			this._data = JSON.parse(jsonString) as I18nData;
+			// console.log('init', this._data);
+			if (!this._data) {
+				error('初始化i18n管理器失败');
+			}
+		} catch (e) {
+			error(`解析i18n数据失败: ${e}`);
 		}
 	}
 
@@ -349,13 +364,13 @@ class EasyI18nManager {
 	}
 }
 
+const useCustomI18n = false;
 export const EasyI18n = new EasyI18nManager();
-if (!CUSTOM_I18N) {
+if (!useCustomI18n) {
 	await EasyI18n.init(new InternalJsonProvider(), new InternalSpriteProvider());
 
 	if (EDITOR_NOT_IN_PREVIEW) {
-		log('使用默认多语言提供实现，如果想使用自定义实现，请在宏定义中定义CUSTOM_I18N并勾选。');
-		log('另外还需在resources目录中添加textures文件夹，并添加图集或SpriteFrame资源。');
+		log('使用默认多语言提供实现，如果想使用自定义实现，请在宏定义中定义CUSTOM_I18N并勾选。另外还需在resources目录中添加textures文件夹，并添加图集或SpriteFrame资源。');
 	}
 } else {
 	if (EDITOR_NOT_IN_PREVIEW) {
@@ -381,21 +396,21 @@ export function setOptions(target: UIRenderer, options: I18nBaseOptions | null):
 }
 
 function log(message: string, ...args: any[]) {
-	if (DISABLE_LOG) {
+	if (ENABLE_LOG) {
 		return;
 	}
 	console.log(`[EasyI18n] ${message}`, ...args);
 }
 
 function warn(message: string, ...args: any[]) {
-	if (DISABLE_LOG) {
+	if (ENABLE_LOG) {
 		return;
 	}
 	console.warn(`[EasyI18n] ${message}`, ...args);
 }
 
 function error(message: string, ...args: any[]) {
-	if (DISABLE_LOG) {
+	if (ENABLE_LOG) {
 		return;
 	}
 	console.error(`[EasyI18n] ${message}`, ...args);

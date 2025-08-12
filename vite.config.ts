@@ -19,15 +19,17 @@ export default defineConfig(({ mode }) => {
 			lib: {
 				entry: {
 					browser: './src/browser/index.ts',
-					panel: './src/panels/panel.ts'
+					panel: './src/panels/panel.ts',
+					builder: './src/builder/index.ts',
+					hooks: './src/builder/hooks.ts'
 				},
 				formats: ['cjs'],
 				fileName: (format, entryName) => `${entryName}.${format}`
 			},
 			watch: isDev
 				? {
-					include: ['./src/**/*.ts', './src/**/*.vue', './src/**/*.css']
-				}
+						include: ['./src/**/*.ts', './src/**/*.vue', './src/**/*.css']
+				  }
 				: null,
 			target: 'modules',
 			minify: false,
