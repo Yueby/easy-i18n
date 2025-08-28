@@ -1,7 +1,7 @@
 {
     "name": "easy-i18n",
     "private": true,
-    "version": "0.0.8",
+    "version": "0.0.9",
     "package_version": 2,
     "type": "module",
     "main": "./dist/browser.cjs",

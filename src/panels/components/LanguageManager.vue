@@ -220,6 +220,7 @@ const setAsDefaultLanguage = (index: number) => {
         emit('select', updatedLanguages[0], 0);
     }
 
+    Editor.Message.send("playable-ads-adapter", "update-language", targetLanguage.code);
     logger.log('设置默认语言:', targetLanguage.name, `(${targetLanguage.code})`);
 
     // 触发保存事件
