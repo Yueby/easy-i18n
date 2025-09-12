@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import fs from 'fs';
+import Papa from 'papaparse';
 import path from 'path';
 import { onMounted, ref, watch } from 'vue';
 import { CONFIG_KEY, DEFAULT } from '../config';
@@ -47,46 +48,39 @@ watch(languages, (newLanguages) => {
     if (newLanguages.length === 1 && !defaultLanguage.value) {
         defaultLanguage.value = newLanguages[0].code;
     }
-
     // 如果删除了默认语言，且还有其他语言，则设置第一个为默认
-    if (newLanguages.length > 0 && !newLanguages.some(lang => lang.code === defaultLanguage.value)) {
+    else if (newLanguages.length > 0 && !newLanguages.some(lang => lang.code === defaultLanguage.value)) {
         defaultLanguage.value = newLanguages[0].code;
     }
-
     // 如果没有语言了，清空默认语言
-    if (newLanguages.length === 0 && defaultLanguage.value) {
+    else if (newLanguages.length === 0) {
         defaultLanguage.value = '';
     }
 }, { deep: true });
 
 // 监听exportPath变化，保存到项目配置，并同步到EasyI18n.ts
 watch(exportPath, async (newPath) => {
-    if (newPath) {
-        await saveExportPath(newPath);
+    if (!newPath) return;
+    
+    await saveExportPath(newPath);
+    
+    // 只取相对于 resources 的路径部分
+    // 例如 project://assets/resources/xxx => xxx
+    const match = newPath.match(/^project:\/\/assets\/resources\/(.+)$/);
+    const relativePath = match ? match[1] : 'easy-i18n/i18n-data';
+    // 去掉末尾的 /，拼接文件名
+    const i18nPath = relativePath.replace(/\/$/, '') + '/' + defaultJsonName;
 
-        // 只取相对于 resources 的路径部分
-        // 例如 project://assets/resources/xxx => xxx
-        const match = newPath.match(/^project:\/\/assets\/resources\/(.+)$/);
-        const relativePath = match ? match[1] : 'easy-i18n/i18n-data';
-        // 去掉末尾的 /，拼接文件名
-        const i18nPath = relativePath.replace(/\/$/, '') + '/' + defaultJsonName;
-
-        // 自动同步 assets/EasyI18n.ts 里的 I18N_DATA_PATH
-        try {
-            // 用 file.getPluginRootDir() 获取插件根目录
-            const pluginRoot = await file.getPluginRootDir();
-            const easyI18nPath = path.join(pluginRoot, 'assets', 'EasyI18n.ts');
-            let content = fs.readFileSync(easyI18nPath, 'utf-8');
-            const newLine = `export const I18N_DATA_PATH: string = '${i18nPath}';`;
-            content = content.replace(
-                /export const I18N_DATA_PATH: string = '.*?';/,
-                newLine
-            );
-            fs.writeFileSync(easyI18nPath, content, 'utf-8');
-            logger.log(`已自动同步 I18N_DATA_PATH: ${i18nPath}`);
-        } catch (error) {
-            logger.error('自动同步 I18N_DATA_PATH 失败:', error);
-        }
+    // 自动同步 assets/EasyI18n.ts 里的 I18N_DATA_PATH
+    try {
+        const pluginRoot = await file.getPluginRootDir();
+        const easyI18nPath = path.join(pluginRoot, 'assets', 'EasyI18n.ts');
+        let content = fs.readFileSync(easyI18nPath, 'utf-8');
+        const newLine = `export const I18N_DATA_PATH: string = '${i18nPath}';`;
+        content = content.replace(/export const I18N_DATA_PATH: string = '.*?';/, newLine);
+        fs.writeFileSync(easyI18nPath, content, 'utf-8');
+    } catch (error) {
+        logger.error('自动同步 I18N_DATA_PATH 失败:', error);
     }
 });
 
@@ -109,12 +103,11 @@ const handleTranslationsChange = (newTranslations: { key: string, item: I18nItem
 onMounted(async () => {
     // 从配置加载导出路径
     await loadExportPath();
-
+    
     // 如果没有配置路径，设置一个默认路径并保存
     if (!exportPath.value) {
         exportPath.value = defaultExportPath;
         await saveExportPath(exportPath.value);
-        logger.log('已设置默认导出路径:', defaultExportPath);
     }
 
     // 尝试加载保存的数据
@@ -209,7 +202,7 @@ const handleSaveData = async () => {
     try {
         // 确保先保存路径配置
         await saveExportPath(exportPath.value);
-        
+
         // 构建数据对象
         const i18nData = {
             languages: languages.value,
@@ -339,6 +332,399 @@ const handleSaveData = async () => {
         logger.error('保存数据失败:', error);
     }
 };
+
+// 处理CSV导入 - 接收ControlPanel传来的路径和选中语言
+const handleImportCsv = async (csvPath: string, selectedLanguages: string[]) => {
+    try {
+        logger.log('开始导入CSV文件:', csvPath);
+        logger.log('选中导入的语言:', selectedLanguages);
+
+        // 读取CSV文件内容
+        let csvContent: string;
+        try {
+            csvContent = fs.readFileSync(csvPath, 'utf-8');
+        } catch (error) {
+            logger.error('读取CSV文件失败:', error);
+            return;
+        }
+
+        // 解析CSV内容
+        const parseResult = Papa.parse(csvContent, {
+            header: true,
+            skipEmptyLines: true,
+            transform: (value: string) => value.trim()
+        });
+
+        if (parseResult.errors.length > 0) {
+            logger.error('CSV解析错误:', parseResult.errors);
+            return;
+        }
+
+        const csvData = parseResult.data as any[];
+        logger.log('CSV解析成功，数据行数:', csvData.length);
+
+        // 验证CSV格式
+        if (csvData.length === 0) {
+            logger.warn('CSV文件为空');
+            return;
+        }
+
+        const firstRow = csvData[0];
+        if (!firstRow.key || !firstRow.type) {
+            logger.error('CSV格式错误：缺少必要的key或type列');
+            return;
+        }
+
+        // 提取语言列（除了key和type之外的所有列）
+        const csvLanguages = Object.keys(firstRow).filter(key => key !== 'key' && key !== 'type');
+        
+        // 过滤出选中的语言
+        const filteredLanguages = csvLanguages.filter(lang => selectedLanguages.includes(lang));
+        
+        if (filteredLanguages.length === 0) {
+            logger.warn('没有找到选中的语言列');
+            return;
+        }
+
+        // 更新语言列表 - 只添加选中的语言
+        const existingLanguages = [...languages.value];
+        filteredLanguages.forEach(langCode => {
+            // 检查是否已存在该语言
+            const existingLang = existingLanguages.find(lang => lang.code === langCode);
+            if (!existingLang) {
+                // 添加新语言
+                existingLanguages.push({
+                    code: langCode,
+                    name: langCode // 使用语言代码作为名称，用户可以后续修改
+                });
+                logger.log('添加新语言:', langCode);
+            }
+        });
+
+        // 如果没有默认语言，设置第一个语言为默认
+        if (!defaultLanguage.value && existingLanguages.length > 0) {
+            defaultLanguage.value = existingLanguages[0].code;
+        }
+
+        // 更新语言列表
+        languages.value = existingLanguages;
+
+        // 处理翻译数据
+        const updatedTranslations = [...translationKeys.value];
+        let addedCount = 0;
+        let updatedCount = 0;
+
+        csvData.forEach(row => {
+            const key = row.key;
+            const type = row.type;
+
+            if (!key || !type) {
+                logger.warn('跳过无效行:', row);
+                return;
+            }
+
+            // 查找是否已存在该翻译键
+            const existingIndex = updatedTranslations.findIndex(item => item.key === key);
+
+            if (existingIndex >= 0) {
+                // 更新现有翻译键 - 只更新选中语言的text内容，保留options
+                const existingItem = updatedTranslations[existingIndex];
+
+                // 更新类型（如果不同）
+                existingItem.item.type = type as 'text' | 'sprite';
+
+                // 只处理选中的语言
+                filteredLanguages.forEach(langCode => {
+                    const rawText = row[langCode] || '';
+                    // 将CSV中的\n字符串转换为实际的换行符
+                    const newText = rawText.replace(/\\n/g, '\n');
+
+                    if (existingItem.item.value[langCode]) {
+                        // 保留现有的options，只更新text
+                        existingItem.item.value[langCode].text = newText;
+                    } else {
+                        // 创建新的语言条目
+                        existingItem.item.value[langCode] = {
+                            text: newText,
+                            options: {}
+                        };
+                    }
+                });
+
+                updatedCount++;
+                logger.log('更新翻译键:', key);
+            } else {
+                // 添加新翻译键
+                const newItem: { key: string, item: I18nItem; } = {
+                    key,
+                    item: {
+                        type: type as 'text' | 'sprite',
+                        value: {}
+                    }
+                };
+
+                // 只处理选中的语言
+                filteredLanguages.forEach(langCode => {
+                    const rawText = row[langCode] || '';
+                    // 将CSV中的\n字符串转换为实际的换行符
+                    const text = rawText.replace(/\\n/g, '\n');
+                    newItem.item.value[langCode] = {
+                        text,
+                        options: {}
+                    };
+                });
+
+                updatedTranslations.push(newItem);
+                addedCount++;
+                logger.log('添加新翻译键:', key);
+            }
+        });
+
+        // 更新翻译键列表
+        translationKeys.value = updatedTranslations;
+
+        // 自动保存数据
+        await handleSaveData();
+
+        logger.log(`CSV导入完成 - 新增: ${addedCount}, 更新: ${updatedCount}`);
+
+    } catch (error) {
+        logger.error('CSV导入失败:', error);
+    }
+};
+
+// 处理CSV导出
+const handleExportCsv = async (csvPath: string) => {
+    try {
+        logger.log('开始导出CSV文件:', csvPath);
+
+        if (languages.value.length === 0) {
+            logger.warn('没有语言数据可导出');
+            return;
+        }
+
+        if (translationKeys.value.length === 0) {
+            logger.warn('没有翻译数据可导出');
+            return;
+        }
+
+        // 构建CSV数据
+        const csvData: any[] = [];
+
+        // 构建header
+        const languageCodes = languages.value.map(lang => lang.code);
+
+        // 遍历所有翻译键
+        translationKeys.value.forEach(translation => {
+            const row: any = {
+                key: translation.key,
+                type: translation.item.type
+            };
+
+            // 为每种语言添加翻译内容
+            languageCodes.forEach(langCode => {
+                const langValue = translation.item.value[langCode];
+                if (langValue) {
+                    // 将实际换行符转换为\n字符串，便于CSV存储
+                    const text = langValue.text.replace(/\n/g, '\\n');
+                    row[langCode] = text;
+                } else {
+                    row[langCode] = '';
+                }
+            });
+
+            csvData.push(row);
+        });
+
+        // 使用Papa.parse生成CSV内容
+        const csvContent = Papa.unparse(csvData, {
+            header: true,
+            delimiter: ',',
+            newline: '\r\n' // 使用Windows换行符，兼容性更好
+        });
+
+        // 写入CSV文件
+        try {
+            fs.writeFileSync(csvPath, csvContent, 'utf-8');
+            logger.log(`CSV导出成功，共导出 ${csvData.length} 条翻译数据`);
+            logger.log(`导出语言: ${languageCodes.join(', ')}`);
+        } catch (writeError) {
+            logger.error('写入CSV文件失败:', writeError);
+            return;
+        }
+
+    } catch (error) {
+        logger.error('CSV导出失败:', error);
+    }
+};
+
+// 处理Options CSV导出
+const handleExportOptionsCsv = async (csvPath: string) => {
+    try {
+        logger.log('开始导出Options CSV文件:', csvPath);
+
+        if (languages.value.length === 0) {
+            logger.warn('没有语言数据可导出');
+            return;
+        }
+
+        if (translationKeys.value.length === 0) {
+            logger.warn('没有翻译数据可导出');
+            return;
+        }
+
+        // 构建CSV数据
+        const csvData: any[] = [];
+
+        // 构建header - key列 + 各语言code列
+        const languageCodes = languages.value.map(lang => lang.code);
+
+        // 遍历所有翻译键
+        translationKeys.value.forEach(translation => {
+            const row: any = {
+                key: translation.key
+            };
+
+            // 为每种语言添加options内容
+            languageCodes.forEach(langCode => {
+                const langValue = translation.item.value[langCode];
+                if (langValue && langValue.options && Object.keys(langValue.options).length > 0) {
+                    // 将options对象转换为JSON字符串
+                    row[langCode] = JSON.stringify(langValue.options);
+                } else {
+                    // 空options对象导出为空字符串
+                    row[langCode] = '';
+                }
+            });
+
+            csvData.push(row);
+        });
+
+        // 使用Papa.parse生成CSV内容
+        const csvContent = Papa.unparse(csvData, {
+            header: true,
+            delimiter: ',',
+            newline: '\r\n' // 使用Windows换行符，兼容性更好
+        });
+
+        // 写入CSV文件
+        try {
+            fs.writeFileSync(csvPath, csvContent, 'utf-8');
+            logger.log(`Options CSV导出成功，共导出 ${csvData.length} 条翻译数据`);
+            logger.log(`导出语言: ${languageCodes.join(', ')}`);
+        } catch (writeError) {
+            logger.error('写入Options CSV文件失败:', writeError);
+            return;
+        }
+
+    } catch (error) {
+        logger.error('Options CSV导出失败:', error);
+    }
+};
+
+// 处理Options CSV导入 - 接收ControlPanel传来的路径和选中语言
+const handleImportOptionsCsv = async (csvPath: string, selectedLanguages: string[]) => {
+    try {
+        logger.log('开始导入Options CSV文件:', csvPath);
+        logger.log('选中导入的Options语言:', selectedLanguages);
+
+        // 读取CSV文件内容，尝试多种编码
+        let csvContent: string;
+        try {
+            // 首先尝试UTF-8编码
+            csvContent = fs.readFileSync(csvPath, 'utf-8');
+
+            // 检测是否包含乱码字符（简单检测）
+            if (csvContent.includes('�') || csvContent.includes('锟斤拷')) {
+                logger.warn('检测到UTF-8编码问题，尝试GBK编码');
+                // 如果检测到乱码，尝试GBK编码
+                const buffer = fs.readFileSync(csvPath);
+                csvContent = buffer.toString('latin1');
+                logger.log('使用GBK编码重新读取文件');
+            }
+        } catch (error) {
+            logger.error('读取Options CSV文件失败:', error);
+            return;
+        }
+
+        // 解析CSV内容
+        const parseResult = Papa.parse(csvContent, {
+            header: true,
+            skipEmptyLines: true,
+            transform: (value: string) => value.trim()
+        });
+
+        if (parseResult.errors && parseResult.errors.length > 0) {
+            logger.error('CSV解析错误:', parseResult.errors);
+            return;
+        }
+
+        const csvData = parseResult.data as any[];
+        if (!csvData || csvData.length === 0) {
+            logger.warn('CSV文件为空或无有效数据');
+            return;
+        }
+
+        logger.log(`解析到 ${csvData.length} 条Options数据`);
+
+        // 从CSV头部提取语言代码（除了key列）
+        const csvHeaders = Object.keys(csvData[0]);
+        const languageCodes = csvHeaders.filter(header => header !== 'key');
+
+        // 过滤出选中的语言
+        const filteredLanguages = languageCodes.filter(lang => selectedLanguages.includes(lang));
+        
+        if (filteredLanguages.length === 0) {
+            logger.warn('没有找到选中的Options语言列');
+            return;
+        }
+
+        // 处理每一行CSV数据
+        csvData.forEach(row => {
+            const key = row.key;
+            if (!key) return;
+
+            // 查找现有的翻译项
+            let existingTranslation = translationKeys.value.find(t => t.key === key);
+
+            if (existingTranslation) {
+                // 更新现有翻译项的options - 只处理选中的语言
+                filteredLanguages.forEach(langCode => {
+                    const optionsJson = row[langCode];
+                    if (optionsJson && optionsJson.trim()) {
+                        try {
+                            const options = JSON.parse(optionsJson);
+
+                            // 确保语言值存在
+                            if (!existingTranslation!.item.value[langCode]) {
+                                existingTranslation!.item.value[langCode] = {
+                                    text: '',
+                                    options: {}
+                                };
+                            }
+
+                            // 更新options，保留现有的text
+                            existingTranslation!.item.value[langCode].options = options;
+                            logger.log(`更新 ${key} 的 ${langCode} options`);
+                        } catch (parseError) {
+                            logger.warn(`解析 ${key} 的 ${langCode} options JSON失败:`, parseError);
+                        }
+                    }
+                });
+            } else {
+                logger.warn(`翻译键 ${key} 不存在，跳过Options导入`);
+            }
+        });
+
+        // 保存数据
+        await handleSaveData();
+        logger.log('Options CSV导入完成');
+
+    } catch (error) {
+        logger.error('Options CSV导入失败:', error);
+    }
+};
+
 </script>
 
 <template>
@@ -346,7 +732,9 @@ const handleSaveData = async () => {
         <ui-label class="title" i18n>easy-i18n.title</ui-label>
 
         <!-- 控制面板 -->
-        <ControlPanel v-model:exportPath="exportPath" @save="handleSaveData" />
+        <ControlPanel v-model:exportPath="exportPath" @save="handleSaveData" @importCsv="handleImportCsv"
+            @importOptionsCsv="handleImportOptionsCsv" @exportCsv="handleExportCsv"
+            @exportOptionsCsv="handleExportOptionsCsv" />
 
         <!-- 语言管理器组件 -->
         <LanguageManager v-model:languages="languages" :selectedIndex="selectedLanguageIndex"

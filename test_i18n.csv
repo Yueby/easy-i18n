@@ -1,0 +1,6 @@
+key,type,en,ru
+tip.backpackfull,text,BACKPACK\nFULL,РЮКЗАК\nПОЛОН
+ui.dragtomove,text,Drag to move,Перетащите для перемещения
+ui.continue,text,CONTINUE,ПРОДОЛЖИТЬ
+ui.logo,sprite,29a03266-9f40-4c2f-8fb1-05ec8b7eab6e@f9941,
+ui.playnow,sprite,2d9d1b38-faf4-4da9-a53a-a5479368daaa@f9941,

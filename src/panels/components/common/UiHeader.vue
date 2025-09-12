@@ -42,7 +42,6 @@ const emit = defineEmits<{
 const headerClasses = computed(() => {
     return {
         'ui-header': true,
-        'ui-header-dark': true,
         'ui-header-disabled': props.disabled,
         'ui-header-collapsible': props.collapsible
     };
@@ -58,7 +57,10 @@ const handleClick = () => {
 <template>
     <div :class="headerClasses" @click="handleClick">
         <div class="ui-header-left">
-            <ui-icon v-if="collapsible" class="ui-header-icon" :value="expanded ? 'collapse' : 'expand'"></ui-icon>
+            <svg v-if="collapsible" class="ui-header-icon" viewBox="0 0 16 16" fill="currentColor">
+                <path v-if="expanded" d="M8 10.5L4 6.5h8L8 10.5z" />
+                <path v-else d="M6 4l4 4-4 4V4z" />
+            </svg>
             <ui-label v-if="title" class="ui-header-title">{{ title }}</ui-label>
         </div>
         <div class="ui-header-actions">
@@ -73,7 +75,7 @@ const handleClick = () => {
     justify-content: space-between;
     align-items: center;
     width: 100%;
-    padding: 8px 6px;
+    padding: 4px 6px;
     background-color: var(--header-background, rgba(50, 50, 50, 0.2));
     border-bottom: 1px solid var(--border-color, rgba(127, 127, 127, 0.2));
     user-select: none;
@@ -97,14 +99,15 @@ const handleClick = () => {
 }
 
 .ui-header-icon {
-    margin-right: 6px;
+    margin-right: 2px;
     opacity: 0.7;
     flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    transition: transform 0.2s ease;
 }
 
 .ui-header-title {
-    font-weight: bold;
-    font-size: 14px;
     color: var(--header-text-color, inherit);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -123,9 +126,5 @@ const handleClick = () => {
 .ui-header-disabled {
     opacity: 0.6;
     cursor: not-allowed;
-}
-
-.ui-header-dark {
-    color: var(--dark-text-color, rgba(255, 255, 255, 0.9));
 }
 </style>

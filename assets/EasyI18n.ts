@@ -1,6 +1,5 @@
 import { _decorator, assetManager, Color, JsonAsset, resources, SpriteAtlas, SpriteFrame, UIRenderer, UITransform } from 'cc';
-import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
-import { ENABLE_LOG } from 'cc/userland/macro';
+import { DEV, EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { I18nBaseOptions, I18nData, I18nItemType, I18nSpriteOptions, I18nTextOptions, II18nJsonProvider, II18nSpriteProvider, SpriteFrameInfo } from './I18nTypes';
 
 const { ccclass, property } = _decorator;
@@ -229,7 +228,7 @@ class EasyI18nManager {
 		return this._data;
 	}
 
-	constructor() {}
+	constructor() { }
 
 	public async init(jsonProvider: II18nJsonProvider, spriteProvider: II18nSpriteProvider) {
 		this._jsonProvider = jsonProvider;
@@ -396,21 +395,21 @@ export function setOptions(target: UIRenderer, options: I18nBaseOptions | null):
 }
 
 function log(message: string, ...args: any[]) {
-	if (ENABLE_LOG) {
+	if (!DEV) {
 		return;
 	}
 	console.log(`[EasyI18n] ${message}`, ...args);
 }
 
 function warn(message: string, ...args: any[]) {
-	if (ENABLE_LOG) {
+	if (!DEV) {
 		return;
 	}
 	console.warn(`[EasyI18n] ${message}`, ...args);
 }
 
 function error(message: string, ...args: any[]) {
-	if (ENABLE_LOG) {
+	if (!DEV) {
 		return;
 	}
 	console.error(`[EasyI18n] ${message}`, ...args);

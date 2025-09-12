@@ -3,6 +3,7 @@ import { computed, defineEmits, defineProps } from 'vue';
 import type { I18nBaseOptions, I18nItem, I18nItemValue, I18nTextOptions } from '../../types/i18n';
 import { file } from '../../utils/file';
 import { logger } from '../../utils/logger';
+import UiSection from './common/UiSection.vue';
 
 interface Props {
     /**
@@ -47,31 +48,17 @@ const emit = defineEmits<{
     (e: 'optionsChange', options: any): void;
 }>();
 
-// 获取当前语言的值对象
-const langValue = computed<I18nItemValue>(() => {
-    const value = props.item.value[props.languageCode];
-    if (!value) {
-        // 如果没有值，返回默认值对象
-        return {
-            text: '',
-            options: {}
-        };
-    }
-    return value;
-});
+const langValue = computed<I18nItemValue>(() => 
+    props.item?.value?.[props.languageCode] || { text: '', options: {} }
+);
 
-// 翻译文本
 const text = computed({
     get() {
-        const rawText = props.item.value[props.languageCode]?.text || '';
-
-        // 如果是图片类型且验证失败，返回空字符串
-        if (props.item.type === 'sprite' && !validateSpriteText(rawText)) {
-            // 通知父组件清空无效翻译
+        const rawText = langValue.value.text || '';
+        if (props.item?.type === 'sprite' && !validateSpriteText(rawText)) {
             setTimeout(() => emit('textChange', ''), 0);
             return '';
         }
-
         return rawText;
     },
     set(value: string) {
@@ -79,65 +66,34 @@ const text = computed({
     }
 });
 
-// 获取当前语言的翻译文本（返回原始存储的文本，当需要原始文本时使用）
-const getTranslationText = () => {
-    return langValue.value.text || '';
-};
+const getTranslationText = () => langValue.value.text || '';
 
-// 从翻译文本中获取精灵帧UUID
 const getSpriteFrameUuid = () => {
     const text = langValue.value.text || '';
-
-    // 如果是组合格式（atlas:spriteFrame），则提取spriteFrame部分
-    if (text && text.includes(':')) {
-        return text.split(':')[1]; // 返回spriteFrame的UUID部分
-    }
-
-    return text; // 如果不是组合格式，直接返回（可能是单独的spriteFrame UUID）
+    return text.includes(':') ? text.split(':')[1] : text;
 };
 
-// 验证翻译文本格式是否正确（针对sprite类型）
 const validateSpriteText = (text: string): boolean => {
-    if (!text) return true; // 空字符串是有效的（未设置资源）
-
-    // UUID格式校验的正则表达式
+    if (!text) return true;
     const uuidRegex = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}(@[0-9a-f]+)?$/i;
-
-    // 检查是否是组合格式
+    
     if (text.includes(':')) {
         const parts = text.split(':');
-        if (parts.length !== 2) return false;
-
-        // 检查两部分是否都是有效的UUID
-        return uuidRegex.test(parts[0]) && uuidRegex.test(parts[1]);
+        return parts.length === 2 && uuidRegex.test(parts[0]) && uuidRegex.test(parts[1]);
     }
-
-    // 如果不是组合格式，检查整个字符串是否是有效UUID
+    
     return uuidRegex.test(text);
 };
 
-// 获取图集UUID（如果有的话）
 const getAtlasUuid = () => {
     const text = langValue.value.text || '';
-
-    // 如果是组合格式（atlas:spriteFrame），则提取atlas部分
-    if (text && text.includes(':')) {
-        return text.split(':')[0]; // 返回atlas的UUID部分
-    }
-
-    return ''; // 没有图集UUID
+    return text.includes(':') ? text.split(':')[0] : '';
 };
 
-// 处理中文输入完成
-const handleCompositionEnd = (event: any) => {
-    // 确保中文输入完成后更新文本
-    emit('textChange', event.target.value);
-};
+const handleCompositionEnd = (event: any) => emit('textChange', event.target.value);
 
-// 处理图片变更
 const handleSpriteChange = async (event: any) => {
     try {
-        // 如果值为空，则直接清空资源
         if (!event.target.value) {
             emit('textChange', '');
             emit('spriteChange', '');
@@ -145,22 +101,14 @@ const handleSpriteChange = async (event: any) => {
         }
 
         const assetInfo = await file.queryAssetInfo(event.target.value);
-
-        // 提取精灵帧UUID
         const spriteFrameUuid = assetInfo.uuid;
         let atlasUuid = '';
 
-        // 检查url是否存在
         if (assetInfo.url) {
-            const url = assetInfo.url;
-
-            const atlasUrl = url.replace('/' + assetInfo.name, '');
-
+            const atlasUrl = assetInfo.url.replace('/' + assetInfo.name, '');
             try {
-                // 查询图集资源信息
                 const atlasInfo = await file.queryAssetInfo(atlasUrl);
-
-                if (atlasInfo && atlasInfo.type === "cc.SpriteAtlas") {
+                if (atlasInfo?.type === "cc.SpriteAtlas") {
                     atlasUuid = atlasInfo.uuid;
                 }
             } catch (error) {
@@ -168,61 +116,30 @@ const handleSpriteChange = async (event: any) => {
             }
         }
 
-        // 根据是否找到图集生成翻译文本
-        let translationText = '';
-        if (atlasUuid !== '') {
-            translationText = `${atlasUuid}:${spriteFrameUuid}`;
-        } else {
-            // 没有找到图集，只使用精灵帧UUID
-            translationText = spriteFrameUuid;
-        }
-
-        // 发送更新的翻译文本
+        const translationText = atlasUuid ? `${atlasUuid}:${spriteFrameUuid}` : spriteFrameUuid;
         emit('textChange', translationText);
         emit('spriteChange', spriteFrameUuid);
-
     } catch (error) {
-        logger.error('处理图片变更时出错:', error);
+        logger.error('处理图片变更失败:', error);
     }
 };
 
-// 获取基础选项值
-const getBaseOption = (key: keyof I18nBaseOptions): any => {
-    if (!langValue.value.options) return undefined;
-    return langValue.value.options[key];
-};
+const getBaseOption = (key: keyof I18nBaseOptions): any => langValue.value.options?.[key];
 
-// 更新基础选项
 const updateBaseOption = (key: keyof I18nBaseOptions, value: any) => {
-    const currentOptions = langValue.value.options || {};
-    emit('optionsChange', {
-        ...currentOptions,
-        [key]: value
-    });
+    emit('optionsChange', { ...langValue.value.options, [key]: value });
 };
 
-// 获取文本选项值
-const getTextOption = (key: keyof I18nTextOptions): any => {
-    if (!langValue.value.options) return undefined;
-    return langValue.value.options[key];
-};
+const getTextOption = (key: keyof I18nTextOptions): any => langValue.value.options?.[key];
 
-// 更新文本选项
 const updateTextOption = (key: keyof I18nTextOptions, value: any) => {
-    const currentOptions = langValue.value.options || {};
-    emit('optionsChange', {
-        ...currentOptions,
-        [key]: value
-    });
+    emit('optionsChange', { ...langValue.value.options, [key]: value });
 };
 
-// 更新内容大小
 const updateContentSize = (dimension: 'width' | 'height', value: number) => {
-    const currentOptions = langValue.value.options || {};
-    const currentSize = currentOptions.contentSize || { width: 0, height: 0 };
-
+    const currentSize = langValue.value.options?.contentSize || { width: 0, height: 0 };
     emit('optionsChange', {
-        ...currentOptions,
+        ...langValue.value.options,
         contentSize: {
             width: dimension === 'width' ? value : (currentSize.width || 0),
             height: dimension === 'height' ? value : (currentSize.height || 0)
@@ -230,32 +147,27 @@ const updateContentSize = (dimension: 'width' | 'height', value: number) => {
     });
 };
 
-// 更新锚点
 const updateAnchorPoint = (dimension: 'x' | 'y', value: number) => {
-    const currentOptions = langValue.value.options || {};
-    const currentAnchor = currentOptions.anchorPoint || { x: 0, y: 0 };
-
+    const currentAnchor = langValue.value.options?.anchorPoint || { x: 0, y: 0 };
     emit('optionsChange', {
-        ...currentOptions,
+        ...langValue.value.options,
         anchorPoint: {
             x: dimension === 'x' ? value : (currentAnchor.x || 0),
             y: dimension === 'y' ? value : (currentAnchor.y || 0)
         }
     });
 };
+
+const resetOptions = () => emit('optionsChange', {});
 </script>
 
 <template>
     <div class="translation-item">
         <!-- 翻译内容编辑区 -->
         <div class="translation-content">
-            <!-- 语言标签显示在最上方 -->
-            <div>
-                <ui-label>{{ languageName }} ({{ languageCode }})</ui-label>
-            </div>
 
             <!-- 常规文本模式 -->
-            <template v-if="item.type !== 'sprite'">
+            <template v-if="item && item.type !== 'sprite'">
                 <ui-prop>
                     <ui-label slot="label">翻译文本</ui-label>
                     <ui-textarea slot="content" v-model="text" :placeholder="`输入${languageName}翻译`"
@@ -264,7 +176,7 @@ const updateAnchorPoint = (dimension: 'x' | 'y', value: number) => {
             </template>
 
             <!-- 图片模式特有部分 - 左右两栏布局 -->
-            <template v-if="item.type === 'sprite'">
+            <template v-if="item && item.type === 'sprite'">
                 <div class="sprite-layout">
                     <!-- 左侧图片预览 -->
                     <div class="sprite-preview">
@@ -299,7 +211,13 @@ const updateAnchorPoint = (dimension: 'x' | 'y', value: number) => {
             </template>
 
             <!-- 选项设置区 -->
-            <ui-section header="选项设置">
+            <UiSection header="选项设置">
+                <template #header-actions>
+                    <ui-button @click="resetOptions" tooltip="重置所有选项" class="reset-options-btn">
+                        <ui-icon value="reset"></ui-icon>
+                    </ui-button>
+                </template>
+
                 <!-- 基础选项 -->
                 <div class="section-item">
                     <!-- Width -->
@@ -335,7 +253,7 @@ const updateAnchorPoint = (dimension: 'x' | 'y', value: number) => {
                 </div>
 
                 <!-- 文本类型特有选项 -->
-                <template v-if="item.type === 'text'">
+                <template v-if="item && item.type === 'text'">
                     <div class="section-item">
                         <ui-prop>
                             <ui-label slot="label">Font Size</ui-label>
@@ -351,7 +269,7 @@ const updateAnchorPoint = (dimension: 'x' | 'y', value: number) => {
                     </div>
 
                 </template>
-            </ui-section>
+            </UiSection>
         </div>
     </div>
 </template>
@@ -411,5 +329,19 @@ const updateAnchorPoint = (dimension: 'x' | 'y', value: number) => {
 .invalid-text {
     display: none;
     /* 隐藏而不是完全删除，以便将来可能需要 */
+}
+
+/* 重置按钮样式 */
+.reset-options-btn {
+    min-width: auto;
+    padding: 2px 4px;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.reset-options-btn ui-icon {
+    font-size: 10px;
 }
 </style>

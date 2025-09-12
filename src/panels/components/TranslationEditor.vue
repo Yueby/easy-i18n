@@ -4,6 +4,7 @@ import type { I18nItem, I18nItemValue, LanguageInfo } from '../../types/i18n';
 import { logger } from '../../utils/logger';
 import UiList from './common/UiList.vue';
 import UiModal from './common/UiModal.vue';
+import UiSection from './common/UiSection.vue';
 import TranslationItem from './TranslationItem.vue';
 
 interface Props {
@@ -90,42 +91,29 @@ const handleAddKey = () => {
 
 // 检查键名是否有效
 const validateKeyName = (keyName: string, originalKey?: string): boolean => {
+    let errorMsg = '';
+    
     // 不能为空
     if (!keyName.trim()) {
-        keyError.value = '键名不能为空';
-        editKeyError.value = '键名不能为空';
-        return false;
+        errorMsg = '键名不能为空';
     }
-
     // 检查格式 (允许字母、数字、点、下划线和短横线)
-    if (!/^[a-zA-Z0-9_\-.]+$/.test(keyName)) {
-        keyError.value = '键名只能包含字母、数字、点、下划线和短横线';
-        editKeyError.value = '键名只能包含字母、数字、点、下划线和短横线';
-        return false;
+    else if (!/^[a-zA-Z0-9_\-.]+$/.test(keyName)) {
+        errorMsg = '键名只能包含字母、数字、点、下划线和短横线';
     }
-
     // 检查是否已存在（编辑时排除自身）
-    const exists = props.translations.some(item =>
-        item.key === keyName && item.key !== originalKey
-    );
-
-    if (exists) {
-        keyError.value = '该键名已存在';
-        editKeyError.value = '该键名已存在';
-        return false;
+    else if (props.translations.some(item => item.key === keyName && item.key !== originalKey)) {
+        errorMsg = '该键名已存在';
     }
-
-    // 清除错误提示
-    keyError.value = '';
-    editKeyError.value = '';
-    return true;
+    
+    keyError.value = errorMsg;
+    editKeyError.value = errorMsg;
+    return !errorMsg;
 };
 
 // 确认添加新键
 const confirmAddKey = () => {
-    if (!validateKeyName(newKeyName.value)) {
-        return; // 验证失败，不继续执行
-    }
+    if (!validateKeyName(newKeyName.value)) return;
 
     // 创建新的翻译键对象
     const newKeyItem = {
@@ -147,20 +135,13 @@ const confirmAddKey = () => {
 
     // 更新翻译列表
     const updatedTranslations = [...props.translations, newKeyItem];
-
-    // 触发更新事件
     emit('update:translations', updatedTranslations);
     emit('change', updatedTranslations);
-
-    // 触发保存事件
     emit('save');
 
     // 选择新添加的项目
     selectedKeyIndex.value = updatedTranslations.length - 1;
-
-    // 关闭模态窗口
     showAddKeyModal.value = false;
-    logger.log('添加了新翻译键:', newKeyName.value);
 };
 
 // 打开编辑键名模态窗口
@@ -177,7 +158,7 @@ const confirmEditKey = () => {
     if (selectedKeyIndex.value < 0) return;
 
     const originalKey = props.translations[selectedKeyIndex.value].key;
-
+    
     // 如果键名没有变化，直接关闭
     if (editKeyName.value === originalKey) {
         showEditKeyModal.value = false;
@@ -185,32 +166,22 @@ const confirmEditKey = () => {
     }
 
     // 验证新键名
-    if (!validateKeyName(editKeyName.value, originalKey)) {
-        return; // 验证失败，不继续执行
-    }
-
-    // 复制翻译列表
-    const updatedTranslations = [...props.translations];
+    if (!validateKeyName(editKeyName.value, originalKey)) return;
 
     // 更新键名
+    const updatedTranslations = [...props.translations];
     updatedTranslations[selectedKeyIndex.value] = {
         key: editKeyName.value,
         item: updatedTranslations[selectedKeyIndex.value].item
     };
 
-    // 触发更新事件
     emit('update:translations', updatedTranslations);
     emit('change', updatedTranslations);
-
-    // 触发保存事件
     emit('save');
 
-    // 关闭模态窗口
     showEditKeyModal.value = false;
-    logger.log('修改了翻译键:', originalKey, '->', editKeyName.value);
 };
 
-// 取消编辑键名
 const cancelEditKey = () => {
     showEditKeyModal.value = false;
     editKeyError.value = '';
@@ -222,33 +193,26 @@ const handleRemoveKey = (_item: { key: string, item: I18nItem; }, index: number)
     showDeleteKeyModal.value = true;
 };
 
-// 确认删除翻译键
 const confirmDeleteKey = () => {
     if (keyToDeleteIndex.value < 0) return;
 
     const updatedTranslations = [...props.translations];
     updatedTranslations.splice(keyToDeleteIndex.value, 1);
 
-    // 如果删除的是当前选中项，重置选中状态
     if (keyToDeleteIndex.value === selectedKeyIndex.value) {
         selectedKeyIndex.value = -1;
     } else if (keyToDeleteIndex.value < selectedKeyIndex.value) {
-        // 如果删除的是选中项之前的元素，更新选中索引
         selectedKeyIndex.value--;
     }
 
     showDeleteKeyModal.value = false;
     keyToDeleteIndex.value = -1;
 
-    // 触发更新事件
     emit('update:translations', updatedTranslations);
     emit('change', updatedTranslations);
-
-    // 触发保存事件
     emit('save');
 };
 
-// 取消删除翻译键
 const cancelDeleteKey = () => {
     showDeleteKeyModal.value = false;
     keyToDeleteIndex.value = -1;
@@ -377,72 +341,36 @@ watch(() => props.languages, (newLanguages, oldLanguages) => {
     }
 }, { deep: true });
 
-// 获取翻译预览
-const getTranslationPreview = (item: { key: string, item: I18nItem; }) => {
-    // 如果没有语言列表，返回空字符串
-    if (!props.languages.length) return '';
-
-    // 使用第一个语言的翻译
-    const firstLangCode = props.languages[0].code;
-    const translation = item.item.value[firstLangCode]?.text;
-
-    // 如果翻译不存在或为空，返回特定提示
-    if (!translation) return '(未翻译)';
-
-    // 如果翻译太长，截断并添加省略号
-    if (translation.length > 20) {
-        return translation.substring(0, 20) + '...';
-    }
-
-    return translation;
-};
-
-// 验证翻译文本格式是否正确（针对sprite类型）
 const validateSpriteText = (text: string): boolean => {
-    if (!text) return true; // 空字符串是有效的（未设置资源）
-
-    // UUID格式校验的正则表达式
+    if (!text) return true;
     const uuidRegex = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}(@[0-9a-f]+)?$/i;
-
-    // 检查是否是组合格式
+    
     if (text.includes(':')) {
         const parts = text.split(':');
-        if (parts.length !== 2) return false;
-
-        // 检查两部分是否都是有效的UUID
-        return uuidRegex.test(parts[0]) && uuidRegex.test(parts[1]);
+        return parts.length === 2 && uuidRegex.test(parts[0]) && uuidRegex.test(parts[1]);
     }
-
-    // 如果不是组合格式，检查整个字符串是否是有效UUID
+    
     return uuidRegex.test(text);
 };
 
-// 检查所有翻译是否有效，返回无效的项目
 const getInvalidTranslations = (): { key: string, langCode: string; }[] => {
     const invalidItems: { key: string, langCode: string; }[] = [];
-
+    
     props.translations.forEach(translation => {
-        // 如果是sprite类型，验证每个语言的文本
         if (translation.item.type === 'sprite') {
             props.languages.forEach(lang => {
                 const text = translation.item.value[lang.code]?.text || '';
                 if (text && !validateSpriteText(text)) {
-                    invalidItems.push({
-                        key: translation.key,
-                        langCode: lang.code
-                    });
+                    invalidItems.push({ key: translation.key, langCode: lang.code });
                 }
             });
         }
     });
-
+    
     return invalidItems;
 };
 
-// 检查是否有无效的翻译
-const hasInvalidTranslations = (): boolean => {
-    return getInvalidTranslations().length > 0;
-};
+const hasInvalidTranslations = (): boolean => getInvalidTranslations().length > 0;
 
 // 暴露验证方法给父组件
 defineExpose({
@@ -450,34 +378,21 @@ defineExpose({
     getInvalidTranslations
 });
 
-// 添加复制功能
 const copyKeyToClipboard = () => {
     if (selectedKeyIndex.value < 0) return;
 
     const keyName = props.translations[selectedKeyIndex.value].key;
-
-    // 使用navigator.clipboard API复制文本到剪贴板
     try {
-        // 创建一个临时文本区域元素
         const textArea = document.createElement('textarea');
         textArea.value = keyName;
-
-        // 确保元素不可见
         textArea.style.position = 'fixed';
         textArea.style.left = '-999999px';
         textArea.style.top = '-999999px';
         document.body.appendChild(textArea);
-
-        // 选择并复制文本
         textArea.focus();
         textArea.select();
         document.execCommand('copy');
-
-        // 移除临时元素
         document.body.removeChild(textArea);
-
-        // 日志记录
-        logger.log('已复制翻译键到剪贴板:', keyName);
     } catch (error) {
         logger.error('复制到剪贴板失败:', error);
     }
@@ -496,9 +411,6 @@ const copyKeyToClipboard = () => {
                     <div class="key-list-item">
                         <ui-label :class="{ 'selected-key': selected }" v-html="item.key">
                         </ui-label>
-                        <div v-if="props.languages.length" class="translation-preview">
-                            {{ getTranslationPreview(item) }}
-                        </div>
                     </div>
                 </template>
                 <template #empty>
@@ -535,18 +447,18 @@ const copyKeyToClipboard = () => {
                             </ui-select>
                         </ui-prop>
 
-                        <!-- 翻译内容区 -->
-                        <ui-section header="翻译内容" expand>
-                            <UiList class="no-border-list" :items="languages" :editable="false" :selectable="false">
-                                <template #item="{ item: language }">
+                        <!-- 翻译内容区 - 每个语言单独折叠 -->
+                        <div class="translation-languages">
+                            <div v-for="language in languages" :key="language.code" class="language-section">
+                                <UiSection :header="`${language.name} (${language.code})`" expand>
                                     <TranslationItem :keyName="translations[selectedKeyIndex].key"
                                         :item="translations[selectedKeyIndex].item" :languageCode="language.code"
                                         :languageName="language.name"
                                         @textChange="(value) => handleTranslationTextChange(language.code, value)"
                                         @optionsChange="(options) => handleOptionsChange(language.code, options)" />
-                                </template>
-                            </UiList>
-                        </ui-section>
+                                </UiSection>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div v-else class="content-placeholder">
@@ -780,28 +692,26 @@ const copyKeyToClipboard = () => {
 }
 
 .key-list-item {
-    padding: 4px 8px;
+    padding: 2px 8px;
     cursor: pointer;
     border-radius: 4px;
     display: flex;
-    flex-direction: column;
-}
-
-.translation-preview {
-    font-size: 11px;
-    opacity: 0.5;
-    margin-top: 2px;
-    font-style: italic;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
+    align-items: center;
+    min-height: 20px;
 }
 
 .no-border-list {
     border: none !important;
     margin: 0 !important;
 }
+
+.translation-languages {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* .language-section 样式已移除，让UiSection自己处理边框 */
 
 .validation-warning {
     display: none;

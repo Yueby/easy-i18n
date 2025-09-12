@@ -77,6 +77,11 @@ interface Props {
   itemWidth?: number | string;
 
   /**
+   * 是否允许换行（仅横向布局有效）
+   */
+  wrap?: boolean;
+
+  /**
    * 项目高度
    * 不设置时由内容自动撑开
    */
@@ -223,7 +228,10 @@ const getItemKey = (item: any, index: number) => {
     </UiHeader>
 
     <!-- 列表内容 -->
-    <div v-if="isExpanded" class="ui-list-content" :class="{ 'horizontal-list': direction === 'horizontal' }">
+    <div v-if="isExpanded" class="ui-list-content" :class="{
+      'horizontal-list': direction === 'horizontal',
+      'wrap-enabled': direction === 'horizontal' && wrap
+    }">
       <div v-for="(item, index) in items" :key="getItemKey(item, index)" :class="[
         'ui-list-item',
         itemClass,
@@ -303,12 +311,22 @@ const getItemKey = (item: any, index: number) => {
   white-space: nowrap;
 }
 
+/* 横向列表换行样式 */
+.ui-list-content.horizontal-list.wrap-enabled {
+  flex-wrap: wrap;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+  white-space: normal;
+}
+
 .ui-list-content.horizontal-list .ui-list-item {
   flex: 0 0 auto;
   margin: 0 3px;
   display: flex;
-  justify-content: center;
-  height: auto;
+}
+
+.ui-list-content.horizontal-list.wrap-enabled .ui-list-item {
+  margin: 2px 3px;
 }
 
 /* 确保折叠时内容区域完全隐藏 */

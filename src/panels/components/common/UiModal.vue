@@ -126,7 +126,7 @@ const handleMaskClick = () => {
 const handleKeyDown = (event: KeyboardEvent) => {
     // 只有当模态窗口可见时才处理键盘事件
     if (!isVisible.value) return;
-    
+
     if (event.key === 'Escape' && props.closeOnPressEscape) {
         event.preventDefault();
         handleCancel();
@@ -134,12 +134,12 @@ const handleKeyDown = (event: KeyboardEvent) => {
         // 避免在input元素内按Enter键时也触发确认
         const activeElement = document.activeElement;
         const isTextArea = activeElement && activeElement.tagName === 'TEXTAREA';
-        
+
         // 如果是多行文本框，不触发确认
         if (isTextArea) return;
-        
+
         // 如果是单行输入框且正在输入，不触发确认
-        if (activeElement && activeElement.tagName === 'INPUT' && 
+        if (activeElement && activeElement.tagName === 'INPUT' &&
             (activeElement as HTMLInputElement).type === 'text') {
             // 如果按下了修饰键（如组合键Ctrl+Enter等）才触发
             if (event.ctrlKey || event.metaKey) {
@@ -168,25 +168,17 @@ onBeforeUnmount(() => {
     <div v-if="isVisible" class="ui-modal-overlay ui-modal-dark" @click="handleMaskClick">
         <div class="ui-modal" :style="modalStyle" @click.stop>
             <!-- 使用UiHeader组件作为标题栏 -->
-            <UiHeader
-                :title="title"
-                :collapsible="false"
-            >
-                <ui-button 
-                    v-if="showClose" 
-                    class="transparent" 
-                    type="icon" 
-                    @click="closeModal"
-                >
+            <UiHeader :title="title" :collapsible="false">
+                <ui-button v-if="showClose" class="transparent" type="icon" @click="closeModal">
                     <ui-icon value="close" color="danger"></ui-icon>
                 </ui-button>
             </UiHeader>
-            
+
             <!-- 内容 -->
             <div class="ui-modal-body">
                 <slot></slot>
             </div>
-            
+
             <!-- 底部按钮 -->
             <div class="ui-modal-footer">
                 <slot name="footer">

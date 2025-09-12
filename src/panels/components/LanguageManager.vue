@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import type { LanguageInfo } from '../../types/i18n';
-import { logger } from '../../utils/logger';
 import UiList from './common/UiList.vue';
 import UiModal from './common/UiModal.vue';
 
@@ -78,68 +77,43 @@ const openAddLanguageModal = () => {
     showAddLanguageModal.value = true;
 };
 
-// 添加语言确认
 const confirmAddLanguage = () => {
-    if (!newLanguageCode.value) {
-        logger.warn('语言代码不能为空');
-        return;
-    }
+    if (!newLanguageCode.value) return;
 
-    // 创建新语言
     const newLanguage = {
-        name: newLanguageName.value || newLanguageCode.value, // 如果名称为空，使用代码作为名称
+        name: newLanguageName.value || newLanguageCode.value,
         code: newLanguageCode.value
     };
 
-    // 更新语言列表
     const updatedLanguages = [...props.languages, newLanguage];
-
-    // 触发更新事件
     emit('update:languages', updatedLanguages);
     emit('change', updatedLanguages);
 
-    // 如果是第一个添加的语言，自动选择它并设为默认语言
     if (props.languages.length === 0) {
         emit('select', newLanguage, 0);
         emit('update:defaultLanguage', newLanguage.code);
     }
 
-    logger.log('添加了新语言:', newLanguage.name, `(${newLanguageCode.value})`);
     showAddLanguageModal.value = false;
-
-    // 触发保存事件
     emit('save');
 };
 
-// 处理删除语言
 const handleRemoveLanguage = (item: LanguageInfo, index: number) => {
-    // 检查这个语言是否是默认语言
     const isDefault = isDefaultLanguage(item);
-
-    // 创建更新后的语言列表
     const updatedLanguages = [...props.languages];
     updatedLanguages.splice(index, 1);
 
-    // 触发更新事件
     emit('update:languages', updatedLanguages);
     emit('change', updatedLanguages);
 
-    // 如果删除的是当前选中的语言，尝试选择第一个语言
     if (index === props.selectedIndex && updatedLanguages.length > 0) {
         emit('select', updatedLanguages[0], 0);
     }
 
-    // 如果删除的是默认语言，且还有其他语言，设置第一个为默认
-    if (isDefault && updatedLanguages.length > 0) {
-        emit('update:defaultLanguage', updatedLanguages[0].code);
-    } else if (updatedLanguages.length === 0) {
-        // 如果没有语言了，清空默认语言
-        emit('update:defaultLanguage', '');
+    if (isDefault) {
+        emit('update:defaultLanguage', updatedLanguages.length > 0 ? updatedLanguages[0].code : '');
     }
 
-    logger.log('删除了语言:', item.name);
-
-    // 触发保存事件
     emit('save');
 };
 
@@ -154,91 +128,59 @@ const openRenameLanguageModal = (index: number) => {
     showRenameLanguageModal.value = true;
 };
 
-// 确认改名语言
 const confirmRenameLanguage = () => {
-    if (editingLanguageIndex.value < 0) return;
-    if (!editLanguageCode.value) {
-        logger.warn('语言代码不能为空');
-        return;
-    }
+    if (editingLanguageIndex.value < 0 || !editLanguageCode.value) return;
 
     const updatedLanguages = [...props.languages];
     const oldLanguage = updatedLanguages[editingLanguageIndex.value];
     const isDefault = isDefaultLanguage(oldLanguage);
 
-    // 更新语言信息
     updatedLanguages[editingLanguageIndex.value] = {
-        name: editLanguageName.value || editLanguageCode.value, // 如果名称为空，使用代码作为名称
+        name: editLanguageName.value || editLanguageCode.value,
         code: editLanguageCode.value
     };
 
-    // 如果修改的是默认语言，需要更新默认语言代码
     if (isDefault) {
         emit('update:defaultLanguage', editLanguageCode.value);
     }
 
-    // 触发更新事件
     emit('update:languages', updatedLanguages);
     emit('change', updatedLanguages);
 
-    logger.log('修改了语言:', oldLanguage.name, '->', editLanguageName.value || editLanguageCode.value);
     showRenameLanguageModal.value = false;
     editingLanguageIndex.value = -1;
-
-    // 触发保存事件
     emit('save');
 };
 
-// 设置默认语言
 const setAsDefaultLanguage = (index: number) => {
     if (index < 0 || index >= props.languages.length) return;
 
     const targetLanguage = props.languages[index];
-
-    // 触发默认语言更新事件
     emit('update:defaultLanguage', targetLanguage.code);
 
-    // 找到默认语言的索引
     const defaultIndex = props.languages.findIndex(lang => lang.code === targetLanguage.code);
-
-    // 如果默认语言不在第一位，则重新排序
     if (defaultIndex > 0) {
-        // 复制当前语言列表
         const updatedLanguages = [...props.languages];
-
-        // 从列表中移除选中的语言
         updatedLanguages.splice(defaultIndex, 1);
-
-        // 将默认语言插入到列表首位
         updatedLanguages.unshift(targetLanguage);
 
-        // 触发更新事件
         emit('update:languages', updatedLanguages);
         emit('change', updatedLanguages);
-
-        // 选中第一个位置（默认语言）
         emit('select', updatedLanguages[0], 0);
     }
 
     Editor.Message.send("playable-ads-adapter", "update-language", targetLanguage.code);
-    logger.log('设置默认语言:', targetLanguage.name, `(${targetLanguage.code})`);
-
-    // 触发保存事件
     emit('save');
 };
 
-// 检查一个语言是否默认语言
-const isDefaultLanguage = (item: LanguageInfo | undefined) => {
-    if (!item) return false;
-    return item.code === props.defaultLanguage;
-};
+const isDefaultLanguage = (item: LanguageInfo | undefined) => item?.code === props.defaultLanguage;
 </script>
 
 <template>
     <div class="language-manager">
         <!-- 语言列表 -->
         <UiList header="支持的语言" :items="languages" :selectedIndex="selectedIndex" :editable="true" direction="horizontal"
-            @select="handleSelectLanguage" @add="openAddLanguageModal" @remove="handleRemoveLanguage">
+            :wrap="true" @select="handleSelectLanguage" @add="openAddLanguageModal" @remove="handleRemoveLanguage">
             <template #header-actions>
                 <ui-button
                     v-if="selectedIndex >= 0 && selectedIndex < languages.length && !isDefaultLanguage(languages[selectedIndex])"
@@ -306,7 +248,7 @@ const isDefaultLanguage = (item: LanguageInfo | undefined) => {
 .language-form {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 4px;
 }
 
 .language-form ui-prop {
