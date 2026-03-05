@@ -126,6 +126,7 @@ function parseResourceUUIDs(text: string): ResourceInfo {
 
 /**
  * 分析资源使用情况
+ * 注意：调用此函数前应该已经完成了英文填充，所以只需要分析默认语言的资源使用情况
  */
 function analyzeResourceUsage(i18nData: I18nData): ResourceAnalysis {
 	const defaultResources = new Set<string>();
@@ -157,6 +158,34 @@ function analyzeResourceUsage(i18nData: I18nData): ResourceAnalysis {
 		nonDefaultResources,
 		resourcesToMove
 	};
+}
+
+/**
+ * 填充默认语言的空缺内容（使用英文作为fallback）
+ * 这一步会修改原始数据，将英文内容填充到默认语言的空缺处
+ */
+function fillDefaultLanguageWithEnglish(i18nData: I18nData): void {
+	if (i18nData.defaultLanguage === 'en') {
+		return; // 如果默认语言就是英文，不需要填充
+	}
+
+	let fillCount = 0;
+
+	Object.entries(i18nData.items).forEach(([key, item]) => {
+		const defaultValue = item.value[i18nData.defaultLanguage];
+		const englishValue = item.value['en'];
+
+		// 如果默认语言不存在或内容为空，但英文有内容，用英文填充
+		if ((!defaultValue || !defaultValue.text) && englishValue && englishValue.text) {
+			item.value[i18nData.defaultLanguage] = englishValue;
+			fillCount++;
+			logger.warn(`翻译键 '${key}' 在默认语言 '${i18nData.defaultLanguage}' 中为空，使用英文内容填充`);
+		}
+	});
+
+	if (fillCount > 0) {
+		logger.warn(`共填充 ${fillCount} 个翻译项`);
+	}
 }
 
 /**
@@ -511,16 +540,25 @@ export const onBeforeBuild: BuildHook.onBeforeBuild = async function () {
 			originalData: i18nData
 		};
 
-		// 分析资源使用情况
+		// 第一步：填充默认语言的空缺内容（使用英文作为fallback）
+		fillDefaultLanguageWithEnglish(i18nData);
+
+		// 第二步：分析资源使用情况（此时默认语言已经包含了填充的英文内容）
 		const analysis = analyzeResourceUsage(i18nData);
 
-		// 创建并写入清理后的多语言文件
+		// 第三步：创建并写入清理后的多语言文件（只保留默认语言）
 		const cleanedData = createCleanedData(i18nData);
 		const cleanedContent = JSON.stringify(cleanedData, null, 2);
 		file.writeFile(i18nDataPath, cleanedContent);
-		logger.warn(`已清理多语言文件，只保留默认语言: ${i18nData.defaultLanguage}`);
+		
+		// 根据是否使用英文fallback输出不同的日志
+		if (i18nData.defaultLanguage === 'en') {
+			logger.warn(`已清理多语言文件，只保留默认语言: ${i18nData.defaultLanguage}`);
+		} else {
+			logger.warn(`已清理多语言文件，只保留默认语言: ${i18nData.defaultLanguage}（缺失内容已用英文填充）`);
+		}
 
-		// 移动非默认语言独有的图片资源
+		// 第四步：移动非默认语言独有的图片资源
 		await moveResourcesToTemp(analysis.resourcesToMove, tempAssetsDir);
 	} catch (error) {
 		logger.warn('onBeforeBuild 处理失败:', error);

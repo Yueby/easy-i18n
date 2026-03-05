@@ -294,8 +294,15 @@ class EasyI18nManager {
 		}
 
 		const valueObj = item.value[this.currentLanguage];
-		if (!valueObj) {
-			warn(`当前语言 '${this.currentLanguage}' 未找到键值 '${key}' 的翻译`);
+		// 检查值是否存在且text不为空
+		if (!valueObj || !valueObj.text) {
+			// 如果当前语言不是英文，尝试使用英文作为fallback
+			if (this.currentLanguage !== 'en' && item.value['en'] && item.value['en'].text) {
+				warn(`当前语言 '${this.currentLanguage}' 未找到键值 '${key}' 的翻译或内容为空，使用英文作为后备翻译`);
+				return item.value['en'].text;
+			}
+			
+			warn(`当前语言 '${this.currentLanguage}' 未找到键值 '${key}' 的翻译或内容为空`);
 			return 'Translation Error';
 		}
 		return valueObj.text;
@@ -311,10 +318,18 @@ class EasyI18nManager {
 			return null;
 		}
 
-		const valueObj = this.data?.items[key].value[this.currentLanguage];
-		if (!valueObj) {
-			warn(`当前语言 '${this.currentLanguage}' 未找到键值 '${key}' 的翻译`);
-			return null;
+		let valueObj = this.data?.items[key].value[this.currentLanguage];
+		// 检查值是否存在且text不为空
+		if (!valueObj || !valueObj.text) {
+			// 如果当前语言不是英文，尝试使用英文作为fallback
+			const englishValue = this.data?.items[key].value['en'];
+			if (this.currentLanguage !== 'en' && englishValue && englishValue.text) {
+				warn(`当前语言 '${this.currentLanguage}' 未找到键值 '${key}' 的翻译或内容为空，使用英文作为后备翻译`);
+				valueObj = englishValue;
+			} else {
+				warn(`当前语言 '${this.currentLanguage}' 未找到键值 '${key}' 的翻译或内容为空`);
+				return null;
+			}
 		}
 
 		const text = valueObj.text;
@@ -348,10 +363,16 @@ class EasyI18nManager {
 			return null;
 		}
 
-		const valueObj = item.value[this.currentLanguage];
-		if (!valueObj) {
-			warn(`当前语言 '${this.currentLanguage}' 未找到键值 '${key}' 的选项`);
-			return null;
+		let valueObj = item.value[this.currentLanguage];
+		// 检查值是否存在且text不为空
+		if (!valueObj || !valueObj.text) {
+			// 静默处理fallback（不输出警告，因为在获取翻译内容时已经警告过了）
+			const englishValue = item.value['en'];
+			if (this.currentLanguage !== 'en' && englishValue && englishValue.text) {
+				valueObj = englishValue;
+			} else {
+				return null;
+			}
 		}
 
 		switch (type) {
@@ -369,11 +390,11 @@ if (!useCustomI18n) {
 	await EasyI18n.init(new InternalJsonProvider(), new InternalSpriteProvider());
 
 	if (EDITOR_NOT_IN_PREVIEW) {
-		log('使用默认多语言提供实现，如果想使用自定义实现，请在宏定义中定义CUSTOM_I18N并勾选。另外还需在resources目录中添加textures文件夹，并添加图集或SpriteFrame资源。');
+		log('使用默认多语言提供实现，如需使用自定义实现，请修改 EasyI18n.ts 中的 useCustomI18n 变量为 true，并实现自定义的 JsonProvider 和 SpriteProvider。');
 	}
 } else {
 	if (EDITOR_NOT_IN_PREVIEW) {
-		log('使用自定义多语言提供实现，如果想使用默认实现，请在宏定义中取消CUSTOM_I18N勾选或者删除宏定义。');
+		log('使用自定义多语言提供实现，如需使用默认实现，请修改 EasyI18n.ts 中的 useCustomI18n 变量为 false。');
 	}
 }
 

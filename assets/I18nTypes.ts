@@ -33,8 +33,8 @@ export interface Vec2 {
  * 组件类型枚举
  */
 export enum ComponentType {
-    LABEL = 'Label',
-    SPRITE = 'Sprite'
+    LABEL = 0,
+    SPRITE = 1
 }
 
 /**
@@ -87,7 +87,7 @@ export interface I18nItemValue {
      * 文本内容或图片引用路径
      */
     text: string;
-    
+
     /**
      * 该语言特有的UI配置选项
      */
