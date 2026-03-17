@@ -62,5 +62,10 @@ export const PLUGIN = {
     /**
      * 备份文件名
      */
-    BACKUP_FILENAME: 'i18n-data-backup.json'
+    BACKUP_FILENAME: 'i18n-data-backup.json',
+
+    /**
+     * 资源移动清单文件名（用于崩溃恢复）
+     */
+    MANIFEST_FILENAME: 'moved_manifest.json'
 }; 

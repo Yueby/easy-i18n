@@ -295,118 +295,123 @@ async function moveResourcesToTemp(resourcesToMove: Set<string>, tempAssetsDir: 
 }
 
 /**
+ * 恢复单个资源文件
+ */
+function restoreSingleResource(fileInfo: MovedFileInfo): boolean {
+	try {
+		if (!fs.existsSync(fileInfo.tempPath)) {
+			logger.warn(`临时文件不存在: ${fileInfo.tempPath}`);
+			return false;
+		}
+
+		const targetDir = path.dirname(fileInfo.originalPath);
+		if (!fs.existsSync(targetDir)) {
+			fs.mkdirSync(targetDir, { recursive: true });
+		}
+
+		fs.copyFileSync(fileInfo.tempPath, fileInfo.originalPath);
+
+		if (fileInfo.tempMetaPath && fileInfo.metaPath && fs.existsSync(fileInfo.tempMetaPath)) {
+			const metaDir = path.dirname(fileInfo.metaPath);
+			if (!fs.existsSync(metaDir)) {
+				fs.mkdirSync(metaDir, { recursive: true });
+			}
+			fs.copyFileSync(fileInfo.tempMetaPath, fileInfo.metaPath);
+		}
+
+		return true;
+	} catch (error) {
+		logger.error(`恢复资源失败: ${fileInfo.originalPath}`, error);
+		return false;
+	}
+}
+
+/**
  * 恢复移动的资源文件
  */
 async function restoreMovedResources(): Promise<void> {
 	if (tempMovedFiles.length === 0) return;
 
-	logger.warn(`开始恢复资源文件，数量: ${tempMovedFiles.length}`);
+	const totalCount = tempMovedFiles.length;
+	logger.warn(`开始恢复资源文件，数量: ${totalCount}`);
+
+	const resourcesToRestore = [...tempMovedFiles];
+	tempMovedFiles = [];
 
 	let successCount = 0;
-	let failedCount = 0;
+	const failedFiles: MovedFileInfo[] = [];
+	const restoredDirs = new Set<string>();
 
-	// 创建一个资源恢复队列
-	const resourcesToRestore = [...tempMovedFiles];
-	tempMovedFiles = []; // 清空原始数组，避免重复处理
-
-	// 分批处理资源，每批处理10个
-	const batchSize = 10;
-
-	while (resourcesToRestore.length > 0) {
-		// 取出一批资源
-		const batch = resourcesToRestore.splice(0, batchSize);
-		const batchPromises = [];
-
-		for (const fileInfo of batch) {
-			batchPromises.push(
-				(async () => {
-					try {
-						if (!fs.existsSync(fileInfo.tempPath)) {
-							logger.warn(`临时文件不存在: ${fileInfo.tempPath}`);
-							return { success: false, fileInfo };
-						}
-
-						// 确保目标目录存在
-						const targetDir = path.dirname(fileInfo.originalPath);
-						if (!fs.existsSync(targetDir)) {
-							try {
-								fs.mkdirSync(targetDir, { recursive: true });
-							} catch (dirError) {
-								logger.error(`无法创建目标目录: ${targetDir}`, dirError);
-								return { success: false, fileInfo };
-							}
-						}
-
-						// 直接使用Node.js文件操作复制文件
-						try {
-							// 复制主文件
-							fs.copyFileSync(fileInfo.tempPath, fileInfo.originalPath);
-
-							// 复制meta文件
-							if (fileInfo.tempMetaPath && fileInfo.metaPath && fs.existsSync(fileInfo.tempMetaPath)) {
-								// 确保meta文件的目录存在
-								const metaDir = path.dirname(fileInfo.metaPath);
-								if (!fs.existsSync(metaDir)) {
-									fs.mkdirSync(metaDir, { recursive: true });
-								}
-								fs.copyFileSync(fileInfo.tempMetaPath, fileInfo.metaPath);
-							}
-
-							return { success: true, fileInfo };
-						} catch (copyError) {
-							logger.error(`复制文件失败: ${fileInfo.originalPath}`, copyError);
-							return { success: false, fileInfo };
-						}
-					} catch (error) {
-						logger.error(`恢复资源失败: ${fileInfo.originalPath}`, error);
-						return { success: false, fileInfo };
-					}
-				})()
-			);
-		}
-
-		// 等待当前批次的所有资源处理完成
-		const batchResults = await Promise.all(batchPromises);
-
-		// 统计成功和失败的数量
-		for (const result of batchResults) {
-			if (result.success) {
-				successCount++;
-			} else {
-				failedCount++;
-				// 对于失败的资源，如果它们有临时文件，我们保留它们以便后续处理
-				if (fs.existsSync(result.fileInfo.tempPath)) {
-					tempMovedFiles.push(result.fileInfo);
-				}
+	// 逐个同步恢复，避免并发问题
+	for (const fileInfo of resourcesToRestore) {
+		const success = restoreSingleResource(fileInfo);
+		if (success) {
+			successCount++;
+			// 收集恢复文件所在的目录，用于后续按目录刷新
+			const dbUrl = file.getAssetRelativePath(fileInfo.originalPath);
+			if (dbUrl) {
+				const dirUrl = dbUrl.substring(0, dbUrl.lastIndexOf('/'));
+				restoredDirs.add(dirUrl);
 			}
-		}
-
-		// 在批次之间稍作暂停
-		if (resourcesToRestore.length > 0) {
-			await new Promise((resolve) => setTimeout(resolve, 100));
+		} else if (fs.existsSync(fileInfo.tempPath)) {
+			failedFiles.push(fileInfo);
 		}
 	}
 
-	logger.warn(`资源恢复完成 - 成功: ${successCount}, 失败: ${failedCount}, 剩余待处理: ${tempMovedFiles.length}`);
+	// 对失败的文件进行一次重试
+	if (failedFiles.length > 0) {
+		logger.warn(`首次恢复有 ${failedFiles.length} 个失败，进行重试...`);
+		await new Promise((resolve) => setTimeout(resolve, 500));
 
-	// 如果有失败的资源，记录它们的信息
+		const retryFiles = [...failedFiles];
+		failedFiles.length = 0;
+
+		for (const fileInfo of retryFiles) {
+			const success = restoreSingleResource(fileInfo);
+			if (success) {
+				successCount++;
+				const dbUrl = file.getAssetRelativePath(fileInfo.originalPath);
+				if (dbUrl) {
+					const dirUrl = dbUrl.substring(0, dbUrl.lastIndexOf('/'));
+					restoredDirs.add(dirUrl);
+				}
+			} else if (fs.existsSync(fileInfo.tempPath)) {
+				failedFiles.push(fileInfo);
+			}
+		}
+	}
+
+	tempMovedFiles = failedFiles;
+
+	logger.warn(`资源恢复完成 - 成功: ${successCount}/${totalCount}, 失败: ${tempMovedFiles.length}`);
+
 	if (tempMovedFiles.length > 0) {
 		logger.warn('以下资源恢复失败，将在下次构建时重试:');
-		tempMovedFiles.forEach((file) => {
-			logger.warn(`- ${file.originalPath}`);
+		tempMovedFiles.forEach((f) => {
+			logger.warn(`  - ${f.originalPath}`);
 		});
 	}
 
-	// 如果有成功恢复的资源，尝试刷新资源数据库
+	// 按目录刷新 asset-db，比全局刷新更精准可靠
 	if (successCount > 0) {
-		try {
-			// 刷新资源数据库，使编辑器能够识别新复制的文件
-			// 注意：这里我们刷新整个assets目录，因为我们不知道具体哪些资源被修改了
-			await Editor.Message.request('asset-db', 'refresh-asset', 'db://assets');
-			logger.warn('已刷新资源数据库');
-		} catch (refreshError) {
-			logger.warn('刷新资源数据库失败，可能需要手动刷新:', refreshError);
+		for (const dirUrl of restoredDirs) {
+			try {
+				await Editor.Message.request('asset-db', 'refresh-asset', dirUrl);
+			} catch (refreshError) {
+				logger.warn(`刷新目录失败: ${dirUrl}`, refreshError);
+			}
 		}
+
+		// 兜底：如果按目录刷新全部失败，尝试全局刷新
+		if (restoredDirs.size === 0) {
+			try {
+				await Editor.Message.request('asset-db', 'refresh-asset', 'db://assets');
+			} catch (refreshError) {
+				logger.warn('全局刷新资源数据库失败，可能需要手动刷新:', refreshError);
+			}
+		}
+
+		logger.warn('已刷新资源数据库');
 	}
 }
 
@@ -450,22 +455,27 @@ function cleanupTempFolder(removeAll = true): void {
 				fs.rmSync(tempAssetsDir, { recursive: true, force: true });
 			} else {
 				// 有未恢复的资源，只清理已恢复的资源
-				// 读取目录中的所有文件
 				const files = fs.readdirSync(tempAssetsDir);
 
-				// 获取未恢复资源的文件名
-				const unresolvedFileNames = new Set(tempMovedFiles.map((file) => path.basename(file.tempPath)));
+				// 构建需要保留的文件集合（未恢复的主文件 + 对应 .meta 文件）
+				const keepFileNames = new Set<string>();
+				for (const movedFile of tempMovedFiles) {
+					keepFileNames.add(path.basename(movedFile.tempPath));
+					if (movedFile.tempMetaPath) {
+						keepFileNames.add(path.basename(movedFile.tempMetaPath));
+					}
+				}
 
-				// 删除已恢复的资源文件
-				for (const file of files) {
-					const fullPath = path.join(tempAssetsDir, file);
-					// 如果不是未恢复的资源文件，且不是备份的多语言文件，则删除
-					if (!unresolvedFileNames.has(file) && file !== PLUGIN.BACKUP_FILENAME && !file.endsWith('.meta') && file !== 'failed_resources.json') {
-						try {
-							fs.unlinkSync(fullPath);
-						} catch (e) {
-							// 忽略删除失败的错误
-						}
+				const preserveFiles = new Set([PLUGIN.BACKUP_FILENAME, PLUGIN.MANIFEST_FILENAME, 'failed_resources.json']);
+
+				for (const fileName of files) {
+					if (keepFileNames.has(fileName) || preserveFiles.has(fileName)) {
+						continue;
+					}
+					try {
+						fs.unlinkSync(path.join(tempAssetsDir, fileName));
+					} catch {
+						// 忽略
 					}
 				}
 			}
@@ -475,28 +485,86 @@ function cleanupTempFolder(removeAll = true): void {
 	}
 }
 
+/**
+ * 尝试从 JSON 文件加载资源映射列表
+ * 成功后删除源文件，解析失败也删除避免反复出错
+ */
+function loadResourceListFromFile(filePath: string): MovedFileInfo[] {
+	try {
+		const content = fs.readFileSync(filePath, 'utf-8');
+		const parsed = JSON.parse(content);
+		fs.unlinkSync(filePath);
+		if (Array.isArray(parsed) && parsed.length > 0) {
+			return parsed;
+		}
+	} catch {
+		try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+	}
+	return [];
+}
+
 export const load: BuildHook.load = async function () {
-	// 检查是否有上次构建未恢复的资源
-	// try {
-	// 	const pluginTempDir = getPluginTempDir();
-	// 	const failedResourcesFile = path.join(pluginTempDir, 'failed_resources.json');
-	// 	if (fs.existsSync(failedResourcesFile)) {
-	// 		const content = fs.readFileSync(failedResourcesFile, 'utf-8');
-	// 		const failedResources = JSON.parse(content);
-	// 		if (Array.isArray(failedResources) && failedResources.length > 0) {
-	// 			logger.warn(`发现上次构建有${failedResources.length}个资源未恢复，将在本次构建后重试`);
-	// 			tempMovedFiles = failedResources;
-	// 			// 删除记录文件
-	// 			fs.unlinkSync(failedResourcesFile);
-	// 		}
-	// 	}
-	// } catch (error) {
-	// 	logger.error('加载未恢复资源信息失败:', error);
-	// }
+	try {
+		const pluginTempDir = getPluginTempDir();
+		const tempAssetsDir = path.join(pluginTempDir, PLUGIN.MOVED_ASSETS_DIR);
+
+		// 1. 检查 failed_resources.json（上次 onAfterBuild 中资源恢复失败的记录）
+		const failedResourcesFile = path.join(pluginTempDir, 'failed_resources.json');
+		if (fs.existsSync(failedResourcesFile)) {
+			const failedResources = loadResourceListFromFile(failedResourcesFile);
+			if (failedResources.length > 0) {
+				logger.warn(`发现上次构建有 ${failedResources.length} 个资源恢复失败，立即重试`);
+				tempMovedFiles = failedResources;
+				await restoreMovedResources();
+				cleanupTempFolder(tempMovedFiles.length === 0);
+			}
+		}
+
+		// 2. 检查 moved_manifest.json（崩溃场景：onBeforeBuild 完成但 onAfterBuild 未执行）
+		const manifestFile = path.join(tempAssetsDir, PLUGIN.MANIFEST_FILENAME);
+		if (fs.existsSync(manifestFile)) {
+			const manifestResources = loadResourceListFromFile(manifestFile);
+			if (manifestResources.length > 0) {
+				logger.warn(`发现崩溃遗留的资源清单，共 ${manifestResources.length} 个资源需要恢复`);
+				tempMovedFiles = manifestResources;
+				await restoreMovedResources();
+				cleanupTempFolder(tempMovedFiles.length === 0);
+			}
+		}
+
+		// 3. 检查未恢复的多语言文件备份
+		const backupFilePath = path.join(tempAssetsDir, PLUGIN.BACKUP_FILENAME);
+		if (fs.existsSync(backupFilePath)) {
+			logger.warn('发现未恢复的多语言文件备份，尝试确定原始路径并恢复');
+			try {
+				const relativePath = await profile.getProject(CONFIG_KEY.EXPORT_PATH);
+				if (relativePath) {
+					const i18nDataPath = await getI18nFilePath();
+					if (i18nDataPath) {
+						fs.copyFileSync(backupFilePath, i18nDataPath);
+						fs.unlinkSync(backupFilePath);
+						logger.warn('已从备份恢复多语言文件');
+					}
+				}
+			} catch (restoreError) {
+				logger.warn('自动恢复多语言文件失败，备份文件保留在临时目录:', restoreError);
+			}
+		}
+	} catch (error) {
+		logger.error('加载未恢复资源信息失败:', error);
+	}
 };
 
 export const onBeforeBuild: BuildHook.onBeforeBuild = async function () {
 	try {
+		// 安全检查：如果上次构建遗留了未恢复的资源/文件，先恢复
+		if (backupI18nInfo || tempMovedFiles.length > 0) {
+			logger.warn('检测到上次构建遗留的未恢复状态，先执行恢复');
+			restoreI18nFile();
+			await restoreMovedResources();
+			cleanupTempFolder(tempMovedFiles.length === 0);
+		}
+
 		// 获取多语言文件路径
 		let i18nDataPath;
 		try {
@@ -537,7 +605,7 @@ export const onBeforeBuild: BuildHook.onBeforeBuild = async function () {
 		backupI18nInfo = {
 			originalPath: i18nDataPath,
 			backupPath,
-			originalData: i18nData
+			originalData: JSON.parse(JSON.stringify(i18nData))
 		};
 
 		// 第一步：填充默认语言的空缺内容（使用英文作为fallback）
@@ -560,6 +628,12 @@ export const onBeforeBuild: BuildHook.onBeforeBuild = async function () {
 
 		// 第四步：移动非默认语言独有的图片资源
 		await moveResourcesToTemp(analysis.resourcesToMove, tempAssetsDir);
+
+		// 持久化 manifest，确保崩溃后也能恢复资源
+		if (tempMovedFiles.length > 0) {
+			const manifestPath = path.join(tempAssetsDir, PLUGIN.MANIFEST_FILENAME);
+			fs.writeFileSync(manifestPath, JSON.stringify(tempMovedFiles, null, 2), 'utf-8');
+		}
 	} catch (error) {
 		logger.warn('onBeforeBuild 处理失败:', error);
 	}
@@ -570,28 +644,23 @@ export const onAfterBuild: BuildHook.onAfterBuild = async function () {
 		// 恢复原始多语言文件
 		restoreI18nFile();
 
-		// 使用非阻塞方式处理资源恢复，不使用await
-		restoreMovedResources()
-			.then(() => {
-				// 如果仍有未恢复的资源，保存它们的信息以便下次构建时重试
-				if (tempMovedFiles.length > 0) {
-					try {
-						// 创建一个持久化存储，记录未恢复的资源
-						const pluginTempDir = getPluginTempDir();
-						const failedResourcesFile = path.join(pluginTempDir, 'failed_resources.json');
-						fs.writeFileSync(failedResourcesFile, JSON.stringify(tempMovedFiles, null, 2), 'utf-8');
-						logger.warn(`已保存${tempMovedFiles.length}个未恢复资源的信息，下次构建时将重试`);
-					} catch (error) {
-						logger.error('保存未恢复资源信息失败:', error);
-					}
-				}
+		// 阻塞等待资源恢复完成，确保所有文件都被恢复
+		await restoreMovedResources();
 
-				// 清理临时文件夹 - 但保留未恢复的资源
-				cleanupTempFolder(false);
-			})
-			.catch((error) => {
-				logger.error('资源恢复失败:', error);
-			});
+		// 如果仍有未恢复的资源，保存它们的信息以便下次构建时重试
+		if (tempMovedFiles.length > 0) {
+			try {
+				const pluginTempDir = getPluginTempDir();
+				const failedResourcesFile = path.join(pluginTempDir, 'failed_resources.json');
+				fs.writeFileSync(failedResourcesFile, JSON.stringify(tempMovedFiles, null, 2), 'utf-8');
+				logger.warn(`已保存${tempMovedFiles.length}个未恢复资源的信息，下次构建时将重试`);
+			} catch (error) {
+				logger.error('保存未恢复资源信息失败:', error);
+			}
+		}
+
+		// 清理临时文件夹 - 但保留未恢复的资源
+		cleanupTempFolder(false);
 	} catch (error) {
 		logger.error('onAfterBuild 处理失败:', error);
 	}
@@ -599,20 +668,12 @@ export const onAfterBuild: BuildHook.onAfterBuild = async function () {
 
 export const unload: BuildHook.unload = async function () {
 	try {
-		// 如果插件卸载时还有未恢复的文件，尝试恢复
 		if (backupI18nInfo || tempMovedFiles.length > 0) {
 			logger.warn('插件卸载时发现未恢复的文件，尝试恢复...');
 			restoreI18nFile();
-
-			// 使用非阻塞方式处理资源恢复
-			restoreMovedResources()
-				.then(() => {
-					logger.warn('卸载时资源恢复完成');
-					cleanupTempFolder();
-				})
-				.catch((error) => {
-					logger.error('卸载时资源恢复失败:', error);
-				});
+			await restoreMovedResources();
+			cleanupTempFolder(tempMovedFiles.length === 0);
+			logger.warn('卸载时资源恢复完成');
 		}
 	} catch (error) {
 		logger.error('unload 处理失败:', error);
