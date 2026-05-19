@@ -46,6 +46,26 @@ let tempMovedFiles: MovedFileInfo[] = [];
 // 存储备份的多语言文件信息
 let backupI18nInfo: BackupInfo | null = null;
 
+const REFRESH_ASSET_TIMEOUT_MS = 5000;
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T | undefined> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+
+	try {
+		return await Promise.race([
+			promise,
+			new Promise<undefined>((resolve) => {
+				timer = setTimeout(() => {
+					logger.warn(`${label} 超时，跳过等待`);
+					resolve(undefined);
+				}, ms);
+			})
+		]);
+	} finally {
+		if (timer) clearTimeout(timer);
+	}
+}
+
 /**
  * 获取多语言JSON文件路径
  */
@@ -396,22 +416,30 @@ async function restoreMovedResources(): Promise<void> {
 	if (successCount > 0) {
 		for (const dirUrl of restoredDirs) {
 			try {
-				await Editor.Message.request('asset-db', 'refresh-asset', dirUrl);
+				await withTimeout(
+					Editor.Message.request('asset-db', 'refresh-asset', dirUrl),
+					REFRESH_ASSET_TIMEOUT_MS,
+					`刷新资源目录 ${dirUrl}`
+				);
 			} catch (refreshError) {
 				logger.warn(`刷新目录失败: ${dirUrl}`, refreshError);
 			}
 		}
 
-		// 兜底：如果按目录刷新全部失败，尝试全局刷新
+		// 兜底：没有收集到可刷新的目录时，尝试全局刷新
 		if (restoredDirs.size === 0) {
 			try {
-				await Editor.Message.request('asset-db', 'refresh-asset', 'db://assets');
+				await withTimeout(
+					Editor.Message.request('asset-db', 'refresh-asset', 'db://assets'),
+					REFRESH_ASSET_TIMEOUT_MS,
+					'全局刷新资源数据库'
+				);
 			} catch (refreshError) {
 				logger.warn('全局刷新资源数据库失败，可能需要手动刷新:', refreshError);
 			}
 		}
 
-		logger.warn('已刷新资源数据库');
+		logger.warn('已请求刷新资源数据库');
 	}
 }
 
